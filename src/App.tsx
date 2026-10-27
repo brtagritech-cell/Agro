@@ -320,7 +320,7 @@ function App() {
       {/* Footer */}
       <footer className="bg-white border-t border-slate-100 py-3 sm:py-4 px-4 text-center text-[10px] sm:text-xs text-slate-400 break-words">
         <div className="max-w-7xl mx-auto">
-          <p>&copy; {new Date().getFullYear()} AgroSync agricultural logistics. Base routing resolves under <code className="bg-slate-50 px-1.5 py-0.5 rounded font-mono font-semibold">/BRT/</code>.</p>
+          <p>&copy; {new Date().getFullYear()} AgroSync agricultural logistics. Active route: <code className="bg-slate-50 px-1.5 py-0.5 rounded font-mono font-semibold">{getCurrentSubUrl()}</code></p>
         </div>
       </footer>
 

@@ -79,7 +79,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
     setOwnerId('');
     setOwnerPassword('');
     setSubUsersText('Ramesh:1234, Suresh:1234, Patel:1234, BVB:1234');
-    setMarksText('BRT, RS, TS, DV, BVB');
+    setMarksText('Agro, BRT, RS, TS, DV, BVB');
     setAgentsText('Ramesh Kumar, Suresh & Sons, Patel Agro, BVB Agencies');
     setFormError('');
     setIsFormOpen(true);
@@ -302,7 +302,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
 
   const downloadCSVTemplate = () => {
     const headers = 'Sub-URL Path,Owner ID,Owner Password,Sub-Users,Brand Marks,Agent Names\n';
-    const sample = '"/BRT/TestBranch/","owner_id","owner_pass","Ramesh:1234, Suresh:1234","BRT, RS, TS","Agent A, Agent B"\n';
+    const sample = '"/Agro/TestBranch/","owner_id","owner_pass","Ramesh:1234, Suresh:1234","Agro, BRT, RS","Agent A, Agent B"\n';
     const blob = new Blob([headers + sample], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -315,8 +315,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
   };
 
   const handleDeleteTenant = (pathToDelete: string) => {
-    if (pathToDelete === '/BRT/') {
-      alert('Cannot delete the default root /BRT/ tenant profile.');
+    if (pathToDelete === '/Agro/' || pathToDelete === '/BRT/' || pathToDelete === tenants[0]?.subUrl) {
+      alert('Cannot delete the default root tenant profile.');
       return;
     }
 
@@ -542,7 +542,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                     </button>
                     <button
                       onClick={() => handleDeleteTenant(t.subUrl)}
-                      disabled={t.subUrl === '/BRT/'}
+                      disabled={t.subUrl === '/Agro/' || t.subUrl === '/BRT/' || t.subUrl === tenants[0]?.subUrl}
                       className="p-1.5 hover:bg-rose-50 text-slate-600 hover:text-rose-600 rounded-lg transition-all border border-transparent hover:border-rose-100 disabled:opacity-50"
                       title="Delete Branch Profile"
                     >
@@ -632,19 +632,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
               {/* Sub-URL Code */}
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Sub-URL Routing Path (e.g. /BRT/Test1/)
+                  Sub-URL Routing Path (e.g. /Agro/Test1/)
                 </label>
                 <input
                   type="text"
                   required
-                  disabled={formType === 'edit' && editingTenant?.subUrl === '/BRT/'}
-                  placeholder="e.g. /BRT/Test1/"
+                  disabled={formType === 'edit' && (editingTenant?.subUrl === '/Agro/' || editingTenant?.subUrl === '/BRT/' || editingTenant?.subUrl === tenants[0]?.subUrl)}
+                  placeholder="e.g. /Agro/Test1/"
                   value={subUrl}
                   onChange={(e) => setSubUrl(e.target.value)}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-semibold font-mono"
                 />
                 <p className="text-[10px] text-slate-400 mt-1">
-                  The routing path code mapping. Example: entering <code className="bg-slate-100 px-1 rounded">/BRT/Test1/</code> creates a site resolved at that link.
+                  The routing path code mapping. Example: entering <code className="bg-slate-100 px-1 rounded">/Agro/Test1/</code> creates a site resolved at that link.
                 </p>
               </div>
 
@@ -659,7 +659,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                   <input
                     type="text"
                     required
-                    placeholder="e.g. BRT"
+                    placeholder="e.g. Agro or BRT"
                     value={ownerId}
                     onChange={(e) => setOwnerId(e.target.value)}
                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-bold font-mono"

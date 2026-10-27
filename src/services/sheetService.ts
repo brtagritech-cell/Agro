@@ -98,13 +98,13 @@ const TENANTS_STORAGE_KEY = 'agrosync_tenants_config';
 
 const DEFAULT_TENANTS: TenantConfig[] = [
   {
-    subUrl: '/BRT/',
+    subUrl: '/Agro/',
     sheetUrl: '',
-    ownerId: 'BRT',
+    ownerId: 'Agro',
     ownerPassword: '1234',
     subUsers: ['Ramesh', 'Suresh', 'Patel', 'BVB'],
     subUserPasswords: { Ramesh: '1234', Suresh: '1234', Patel: '1234', BVB: '1234' },
-    marks: ['BRT', 'RS', 'TS', 'DV', 'BVB'],
+    marks: ['Agro', 'BRT', 'RS', 'TS', 'DV', 'BVB'],
     agents: ['Ramesh Kumar', 'Suresh & Sons', 'Patel Agro', 'BVB Agencies'],
     fullLink: ''
   }
@@ -196,12 +196,27 @@ export function getCurrentTenant(): TenantConfig {
   }
   
   const tenants = getTenants();
-  const match = tenants.find(t => t.subUrl === currentSubUrl);
+  const match = tenants.find(t => 
+    t.subUrl.toLowerCase() === currentSubUrl.toLowerCase() ||
+    (currentSubUrl.toLowerCase() === '/agro/' && t.subUrl.toLowerCase() === '/brt/') ||
+    (currentSubUrl.toLowerCase() === '/brt/' && t.subUrl.toLowerCase() === '/agro/')
+  );
   if (match) {
-    return match;
+    return {
+      ...match,
+      subUrl: currentSubUrl
+    };
   }
   
-  return tenants[0] || DEFAULT_TENANTS[0];
+  const defaultTenant = tenants[0] || DEFAULT_TENANTS[0];
+  if (defaultTenant && currentSubUrl !== '/' && currentSubUrl !== '/admin/') {
+    return {
+      ...defaultTenant,
+      subUrl: currentSubUrl
+    };
+  }
+
+  return defaultTenant;
 }
 
 export function getScriptUrl(): string {

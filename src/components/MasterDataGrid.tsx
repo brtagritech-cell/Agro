@@ -173,6 +173,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
             className="w-full pl-10 pr-8 py-2 sm:py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 text-sm font-medium appearance-none cursor-pointer"
           >
             <option value="">All Marks</option>
+            <option value="Agro">Agro</option>
             <option value="BRT">BRT</option>
             <option value="RS">RS</option>
             <option value="TS">TS</option>
