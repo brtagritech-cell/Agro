@@ -10,12 +10,22 @@ import {
   Save, 
   LogOut, 
   AlertCircle,
+  AlertTriangle,
   ArrowRight,
   Globe,
   Upload,
-  Zap
+  Zap,
+  Loader2,
+  CheckCircle2
 } from 'lucide-react';
-import { getTenants, saveTenants, type TenantConfig, normalizeSubUrl } from '../services/sheetService';
+import { 
+  getTenants, 
+  saveTenants, 
+  deleteBranch, 
+  fetchTenantsFromSupabase, 
+  type TenantConfig, 
+  normalizeSubUrl 
+} from '../services/sheetService';
 import { SupabaseConnectModal } from './SupabaseConnectModal';
 import { getSupabaseCredentials } from '../services/supabaseClient';
 
@@ -40,6 +50,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
   const [supabaseCreds, setSupabaseCreds] = useState(getSupabaseCredentials());
 
+  // Branch Deletion States
+  const [deletingPath, setDeletingPath] = useState<string | null>(null);
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<TenantConfig | null>(null);
+  const [deleteFeedback, setDeleteFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   // Form fields
   const [subUrl, setSubUrl] = useState('');
   const [ownerId, setOwnerId] = useState('');
@@ -61,12 +76,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
   const [markError, setMarkError] = useState('');
   const [agentError, setAgentError] = useState('');
 
-
-
   // Load configuration on mount or auth success
   useEffect(() => {
     if (isAuthenticated) {
       setTenants(getTenants());
+      fetchTenantsFromSupabase().then(res => {
+        if (res.success && res.tenants && res.tenants.length > 0) {
+          setTenants(res.tenants);
+        }
+      });
     }
   }, [isAuthenticated]);
 
@@ -449,16 +467,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
     document.body.removeChild(link);
   };
 
-  const handleDeleteTenant = (pathToDelete: string) => {
-    if (['/spicelink/', '/agro/', '/brt/'].includes(pathToDelete.toLowerCase()) || pathToDelete === tenants[0]?.subUrl) {
-      alert('Cannot delete the default root tenant profile.');
+  const promptDeleteTenant = (tenant: TenantConfig) => {
+    if (tenants.length <= 1) {
+      alert('Cannot delete this branch profile. At least one branch must remain active in the system.');
       return;
     }
+    setDeleteFeedback(null);
+    setDeleteConfirmTarget(tenant);
+  };
 
-    if (window.confirm(`Are you sure you want to delete the branch profile for "${pathToDelete}"?`)) {
-      const updated = tenants.filter(t => t.subUrl !== pathToDelete);
-      saveTenants(updated);
-      setTenants(updated);
+  const confirmDeleteTenant = async () => {
+    if (!deleteConfirmTarget) return;
+    const targetUrl = deleteConfirmTarget.subUrl;
+    setDeletingPath(targetUrl);
+    setDeleteFeedback(null);
+
+    try {
+      const res = await deleteBranch(targetUrl);
+      if (res.success) {
+        setTenants(prev => prev.filter(t => normalizeSubUrl(t.subUrl).toLowerCase() !== normalizeSubUrl(targetUrl).toLowerCase()));
+        setDeleteFeedback({ type: 'success', message: res.message });
+        setDeleteConfirmTarget(null);
+        setTimeout(() => setDeleteFeedback(null), 6000);
+      } else {
+        setDeleteFeedback({ type: 'error', message: res.message });
+      }
+    } catch (err: any) {
+      setDeleteFeedback({ type: 'error', message: err?.message || 'Failed to delete branch' });
+    } finally {
+      setDeletingPath(null);
     }
   };
 
@@ -631,6 +668,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
           </div>
         </div>
 
+        {/* Delete / Action Feedback Banner */}
+        {deleteFeedback && (
+          <div className={`p-4 rounded-2xl flex items-center justify-between text-xs font-semibold animate-fade-in ${
+            deleteFeedback.type === 'success' 
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+              : 'bg-rose-50 text-rose-800 border border-rose-200'
+          }`}>
+            <div className="flex items-center gap-2.5">
+              {deleteFeedback.type === 'success' ? (
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertCircle className="h-5 w-5 text-rose-600 shrink-0" />
+              )}
+              <span>{deleteFeedback.message}</span>
+            </div>
+            <button 
+              type="button"
+              onClick={() => setDeleteFeedback(null)} 
+              className="p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-all"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-soft">
           <div>
             <h2 className="text-lg sm:text-xl font-bold text-slate-800">Branch Profiles & Site Routing</h2>
@@ -686,12 +748,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                       <Edit2 className="h-4 w-4" />
                     </button>
                     <button
-                      onClick={() => handleDeleteTenant(t.subUrl)}
-                      disabled={['/spicelink/', '/agro/', '/brt/'].includes(t.subUrl.toLowerCase()) || t.subUrl === tenants[0]?.subUrl}
-                      className="p-1.5 hover:bg-rose-50 text-slate-600 hover:text-rose-600 rounded-lg transition-all border border-transparent hover:border-rose-100 disabled:opacity-50"
-                      title="Delete Branch Profile"
+                      type="button"
+                      onClick={() => promptDeleteTenant(t)}
+                      disabled={tenants.length <= 1 || deletingPath === t.subUrl}
+                      className="p-1.5 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-lg transition-all border border-transparent hover:border-rose-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                      title={tenants.length <= 1 ? "At least one branch profile must remain active" : `Delete ${t.subUrl} Branch`}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      {deletingPath === t.subUrl ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-rose-600" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -784,7 +851,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                 <input
                   type="text"
                   required
-                  disabled={formType === 'edit' && (['/spicelink/', '/agro/', '/brt/'].includes(editingTenant?.subUrl.toLowerCase() || '') || editingTenant?.subUrl === tenants[0]?.subUrl)}
+                  disabled={formType === 'edit'}
                   placeholder="e.g. /Agro/Test1/"
                   value={subUrl}
                   onChange={(e) => setSubUrl(e.target.value)}
@@ -1115,6 +1182,84 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
           </div>
         </div>
       )}
+
+      {/* Delete Branch Confirmation Modal */}
+      {deleteConfirmTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+          <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 p-5 sm:p-6 space-y-4 animate-slide-up max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto overscroll-contain">
+            {/* Mobile Sheet Drag Handle */}
+            <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mb-2 sm:hidden shrink-0" />
+
+            <div className="text-center pb-2 border-b border-slate-100">
+              <div className="h-12 w-12 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-2.5 shadow-sm">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-slate-800">Delete Branch Profile</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Are you sure you want to delete this branch?
+              </p>
+            </div>
+
+            <div className="bg-rose-50/70 border border-rose-100 rounded-2xl p-4 space-y-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-rose-700 font-bold uppercase tracking-wider text-[10px]">Branch Sub-URL</span>
+                <span className="font-mono font-bold text-rose-950 bg-white px-2.5 py-1 rounded-lg border border-rose-200 shadow-2xs">
+                  {deleteConfirmTarget.subUrl}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-slate-600">
+                <span className="font-medium">Owner ID:</span>
+                <span className="font-semibold text-slate-800 font-mono">{deleteConfirmTarget.ownerId}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-slate-600">
+                <span className="font-medium">Sub-Users Assigned:</span>
+                <span className="font-semibold text-slate-800">{deleteConfirmTarget.subUsers?.length || 0} users</span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-slate-600">
+                <span className="font-medium">Allowed Brands / Marks:</span>
+                <span className="font-semibold text-slate-800">{deleteConfirmTarget.marks?.length || 0} marks</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200/70 rounded-xl flex gap-2.5 text-xs text-amber-900 leading-normal font-medium">
+              <AlertCircle className="h-4.5 w-4.5 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                This will remove the branch routing configuration, credentials, and synchronize this deletion to the cloud database.
+              </span>
+            </div>
+
+            <div className="flex gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmTarget(null)}
+                disabled={!!deletingPath}
+                className="flex-1 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteTenant}
+                disabled={!!deletingPath}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-[0.99] text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-rose-600/20 flex items-center justify-center gap-1.5"
+              >
+                {deletingPath ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" />
+                    <span>Delete Branch</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Supabase Connect Modal */}
       <SupabaseConnectModal
         isOpen={isSupabaseModalOpen}

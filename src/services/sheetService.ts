@@ -297,6 +297,120 @@ export async function saveTenants(tenants: TenantConfig[]): Promise<{ success: b
   }
 }
 
+export async function deleteBranch(subUrl: string): Promise<{ success: boolean; message: string }> {
+  const normalized = normalizeSubUrl(subUrl);
+  const normalizedLower = normalized.toLowerCase();
+  
+  const currentTenants = getTenants();
+  const updatedTenants = currentTenants.filter(t => normalizeSubUrl(t.subUrl).toLowerCase() !== normalizedLower);
+  
+  if (currentTenants.length <= 1) {
+    return { 
+      success: false, 
+      message: 'Cannot delete this branch profile. At least one branch must remain active in the system.' 
+    };
+  }
+  
+  // 1. Update localStorage immediately
+  localStorage.setItem(TENANTS_STORAGE_KEY, JSON.stringify(updatedTenants));
+  
+  // 2. Clean up local cached transactions for this branch
+  try {
+    const txKey = `agrosync_transactions_${normalized.replace(/\//g, '_')}`;
+    localStorage.removeItem(txKey);
+  } catch (e) {
+    console.warn('Failed to clear branch local tx cache:', e);
+  }
+  
+  // 3. Delete from Supabase Database if enabled
+  if (isSupabaseEnabled()) {
+    try {
+      // Delete from tenants table in Supabase (matching case-insensitively)
+      const { error: dbError } = await supabase
+        .from('tenants')
+        .delete()
+        .ilike('sub_url', normalized);
+
+      if (dbError) {
+        console.error('Failed to delete branch from Supabase:', dbError);
+        return { 
+          success: false, 
+          message: `Branch removed locally, but Supabase error: ${dbError.message}` 
+        };
+      }
+
+      // Also clean up any associated transactions in Supabase for this branch
+      try {
+        await supabase
+          .from('transactions')
+          .delete()
+          .ilike('sub_url', normalized);
+      } catch (txErr) {
+        console.warn('Branch transactions cleanup in Supabase note:', txErr);
+      }
+
+      console.log(`Branch ${normalized} deleted successfully from Supabase.`);
+      return { 
+        success: true, 
+        message: `Branch "${normalized}" permanently deleted from system and Supabase database.` 
+      };
+    } catch (err: any) {
+      console.error('Error deleting branch from Supabase:', err);
+      return { success: false, message: err?.message || 'Error deleting branch from Supabase' };
+    }
+  }
+
+  return { success: true, message: `Branch "${normalized}" deleted successfully.` };
+}
+
+export async function fetchTenantsFromSupabase(): Promise<{ success: boolean; tenants: TenantConfig[]; message?: string }> {
+  if (!isSupabaseEnabled()) {
+    return { success: false, tenants: getTenants(), message: 'Supabase credentials not configured' };
+  }
+
+  try {
+    const { data: tenantData, error: tenantError } = await supabase
+      .from('tenants')
+      .select('*');
+
+    if (tenantError) {
+      throw new Error(tenantError.message);
+    }
+
+    if (tenantData && tenantData.length > 0) {
+      const mappedTenants: TenantConfig[] = tenantData.map(t => {
+        const subUserPasswords = t.sub_user_passwords || {};
+        const masterData = subUserPasswords._master_data || {};
+        const bagCost = masterData.bagCost !== undefined ? parseFloat(masterData.bagCost) : 25;
+        const taram = masterData.taram !== undefined ? parseFloat(masterData.taram) : 1.100;
+        return {
+          subUrl: t.sub_url,
+          sheetUrl: '',
+          ownerId: t.owner_id,
+          ownerPassword: t.owner_password,
+          subUsers: t.sub_users || [],
+          subUserPasswords: t.sub_user_passwords || {},
+          marks: t.marks || [],
+          agents: t.agents || [],
+          fullLink: t.full_link || '',
+          bagCost,
+          taram
+        };
+      });
+      localStorage.setItem(TENANTS_STORAGE_KEY, JSON.stringify(mappedTenants));
+      return { success: true, tenants: mappedTenants };
+    }
+
+    // If Supabase table is completely empty, sync local tenants to Supabase
+    const local = getTenants();
+    await syncBranchesToSheet(local);
+    return { success: true, tenants: local };
+  } catch (err: any) {
+    console.error('Failed to fetch tenants from Supabase:', err);
+    return { success: false, tenants: getTenants(), message: err?.message || String(err) };
+  }
+}
+
 export async function updateBranchConfiguration(
   subUrl: string,
   updatedData: Partial<TenantConfig>
