@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Calendar as CalendarIcon, 
   Plus, 
@@ -15,7 +15,9 @@ import {
   Tag,
   Trash2,
   AlertCircle,
-  Save
+  Save,
+  ChevronDown,
+  Check
 } from 'lucide-react';
 import { 
   type Transaction, 
@@ -89,6 +91,12 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const [mark, setMark] = useState<string>((currentTenant?.marks || [])[0] || 'BRT');
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
 
+  // Searchable combobox dropdown states for Add Transaction Form
+  const [isAgentDropdownOpen, setIsAgentDropdownOpen] = useState(false);
+  const [isMarkDropdownOpen, setIsMarkDropdownOpen] = useState(false);
+  const agentDropdownRef = useRef<HTMLDivElement>(null);
+  const markDropdownRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (tenant?.marks && tenant.marks.length > 0) {
       if (!mark || !tenant.marks.includes(mark)) {
@@ -116,6 +124,58 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const [branchAgents, setBranchAgents] = useState<string[]>([]);
   const [newBranchAgent, setNewBranchAgent] = useState('');
   const [branchAgentError, setBranchAgentError] = useState('');
+
+  // Available commission agents: from tenant configuration + all already entered transactions
+  const availableAgents = useMemo(() => {
+    const fromTenant = tenant?.agents || currentTenant?.agents || branchAgents || [];
+    const fromTxs = transactions.map(t => t.agent).filter(Boolean);
+    const set = new Set<string>();
+    [...fromTenant, ...fromTxs].forEach(a => {
+      const clean = (a || '').trim();
+      if (clean) set.add(clean);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [tenant, currentTenant, branchAgents, transactions]);
+
+  // Filtered agents matching typed input
+  const filteredAgents = useMemo(() => {
+    if (!agent.trim()) return availableAgents;
+    const q = agent.trim().toLowerCase();
+    return availableAgents.filter(a => a.toLowerCase().includes(q));
+  }, [availableAgents, agent]);
+
+  // Available brand marks: from tenant configuration + all already entered transactions
+  const availableMarks = useMemo(() => {
+    const fromTenant = tenant?.marks || currentTenant?.marks || branchMarks || [];
+    const fromTxs = transactions.map(t => t.mark).filter(Boolean);
+    const set = new Set<string>();
+    [...fromTenant, ...fromTxs].forEach(m => {
+      const clean = (m || '').trim().toUpperCase();
+      if (clean) set.add(clean);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [tenant, currentTenant, branchMarks, transactions]);
+
+  // Filtered marks matching typed input
+  const filteredMarks = useMemo(() => {
+    if (!mark.trim()) return availableMarks;
+    const q = mark.trim().toLowerCase();
+    return availableMarks.filter(m => m.toLowerCase().includes(q));
+  }, [availableMarks, mark]);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (agentDropdownRef.current && !agentDropdownRef.current.contains(e.target as Node)) {
+        setIsAgentDropdownOpen(false);
+      }
+      if (markDropdownRef.current && !markDropdownRef.current.contains(e.target as Node)) {
+        setIsMarkDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Pricing state
   const [masterBagCost, setMasterBagCost] = useState<string>(String(tenant.bagCost ?? 25));
@@ -526,13 +586,45 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     setIsSubmitting(false);
     
     if (response.success) {
+      // 1. Check if Commission Agent is new, and if so, save it to the database!
+      const trimmedAgent = reviewData.agent.trim();
+      const currentAgents = tenant?.agents || branchAgents || [];
+      const isAgentKnown = currentAgents.some(a => a.trim().toLowerCase() === trimmedAgent.toLowerCase());
+      if (!isAgentKnown && trimmedAgent) {
+        const updatedAgents = [...currentAgents, trimmedAgent];
+        setBranchAgents(updatedAgents);
+        try {
+          await updateBranchConfiguration(tenant.subUrl, { agents: updatedAgents });
+          console.log(`New Commission Agent "${trimmedAgent}" saved to database successfully.`);
+        } catch (err) {
+          console.warn('Failed to auto-save new agent to database:', err);
+        }
+      }
+
+      // 2. Check if Brand / Mark is new, and if so, save it to the database!
+      const trimmedMark = reviewData.mark.trim().toUpperCase();
+      const currentMarks = tenant?.marks || branchMarks || [];
+      const isMarkKnown = currentMarks.some(m => m.trim().toUpperCase() === trimmedMark);
+      if (!isMarkKnown && trimmedMark) {
+        const updatedMarks = [...currentMarks, trimmedMark];
+        setBranchMarks(updatedMarks);
+        try {
+          await updateBranchConfiguration(tenant.subUrl, { marks: updatedMarks });
+          console.log(`New Brand Mark "${trimmedMark}" saved to database successfully.`);
+        } catch (err) {
+          console.warn('Failed to auto-save new mark to database:', err);
+        }
+      }
+
       setSubmitResult({ success: true, message: response.message });
       // Reset form states
       setLot('');
       setBags('');
       setRate('');
       setAgent('');
-      setMark('BRT');
+      setMark(tenant?.marks?.[0] || 'BRT');
+      setIsAgentDropdownOpen(false);
+      setIsMarkDropdownOpen(false);
       
       // Navigate to Ledger tab
       setTimeout(() => {
@@ -929,23 +1021,98 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                 />
               </div>
 
-              {/* Commission Agent Name */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Commission Agent Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Enter full name (e.g. Ramesh Kumar)"
-                  value={agent}
-                  onChange={(e) => setAgent(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-medium"
-                />
+              {/* Commission Agent Name with Dropdown Search */}
+              <div className="relative" ref={agentDropdownRef}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    Commission Agent Name
+                  </label>
+                  {agent.trim() && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border font-mono ${
+                      availableAgents.some(a => a.toLowerCase() === agent.trim().toLowerCase())
+                        ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                        : 'text-indigo-700 bg-indigo-50 border-indigo-200'
+                    }`}>
+                      {availableAgents.some(a => a.toLowerCase() === agent.trim().toLowerCase()) 
+                        ? 'Existing Agent' 
+                        : '+ New (Will Save to DB)'}
+                    </span>
+                  )}
+                </div>
+
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    placeholder="Search or enter agent name (e.g. Ramesh Kumar)"
+                    value={agent}
+                    onChange={(e) => {
+                      setAgent(e.target.value);
+                      setIsAgentDropdownOpen(true);
+                    }}
+                    onFocus={() => setIsAgentDropdownOpen(true)}
+                    className="w-full px-4 py-2.5 pr-10 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-medium focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 transition-all"
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setIsAgentDropdownOpen(prev => !prev)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors cursor-pointer"
+                    title="Toggle Agent Suggestions"
+                  >
+                    <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isAgentDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
+
+                {/* Dropdown Suggestions Menu */}
+                {isAgentDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-52 overflow-y-auto overscroll-contain animate-fade-in p-1.5 space-y-0.5">
+                    {filteredAgents.length > 0 ? (
+                      filteredAgents.map((item) => {
+                        const isSelected = item.toLowerCase() === agent.trim().toLowerCase();
+                        return (
+                          <div
+                            key={item}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setAgent(item);
+                              setIsAgentDropdownOpen(false);
+                            }}
+                            className={`px-3 py-2 text-xs font-semibold rounded-xl cursor-pointer transition-all flex items-center justify-between ${
+                              isSelected 
+                                ? 'bg-indigo-50 text-indigo-800 font-bold' 
+                                : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+                            }`}
+                          >
+                            <span className="break-words">{item}</span>
+                            {isSelected && <Check className="h-3.5 w-3.5 text-indigo-600 shrink-0" />}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="p-2.5 text-center text-xs text-slate-400 font-medium">
+                        No existing agents matching "{agent}"
+                      </div>
+                    )}
+
+                    {agent.trim() && !availableAgents.some(a => a.toLowerCase() === agent.trim().toLowerCase()) && (
+                      <div
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setIsAgentDropdownOpen(false);
+                        }}
+                        className="mt-1 pt-1 border-t border-slate-100 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 rounded-xl cursor-pointer text-xs font-bold flex items-center gap-1.5 transition-colors"
+                      >
+                        <Plus className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                        <span className="truncate">Add & save new agent: <strong>"{agent.trim()}"</strong></span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Mark Dropdown */}
-              <div>
+              {/* Brand Name / Mark with Dropdown Search */}
+              <div className="relative" ref={markDropdownRef}>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
                     Brand Name / Mark
@@ -953,23 +1120,82 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   <button
                     type="button"
                     onClick={() => openBranchSettingsModal('marks')}
-                    className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors"
+                    className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors cursor-pointer"
                   >
                     <Plus className="w-3 h-3" />
-                    <span>Add New Mark</span>
+                    <span>Manage Marks</span>
                   </button>
                 </div>
-                <select
-                  value={mark}
-                  onChange={(e) => setMark(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-medium appearance-none cursor-pointer"
-                >
-                  {(tenant?.marks || currentTenant?.marks || []).map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
+
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    placeholder="Search or enter Brand Mark (e.g. BRT, AGRO)"
+                    value={mark}
+                    onChange={(e) => {
+                      setMark(e.target.value.toUpperCase());
+                      setIsMarkDropdownOpen(true);
+                    }}
+                    onFocus={() => setIsMarkDropdownOpen(true)}
+                    className="w-full px-4 py-2.5 pr-10 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-bold uppercase font-mono focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 transition-all"
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setIsMarkDropdownOpen(prev => !prev)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors cursor-pointer"
+                    title="Toggle Mark Suggestions"
+                  >
+                    <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isMarkDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
+
+                {/* Mark Dropdown Menu */}
+                {isMarkDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-52 overflow-y-auto overscroll-contain animate-fade-in p-1.5 space-y-0.5">
+                    {filteredMarks.length > 0 ? (
+                      filteredMarks.map((item) => {
+                        const isSelected = item.toUpperCase() === mark.trim().toUpperCase();
+                        return (
+                          <div
+                            key={item}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setMark(item);
+                              setIsMarkDropdownOpen(false);
+                            }}
+                            className={`px-3 py-2 text-xs font-bold uppercase font-mono rounded-xl cursor-pointer transition-all flex items-center justify-between ${
+                              isSelected 
+                                ? 'bg-indigo-50 text-indigo-800' 
+                                : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+                            }`}
+                          >
+                            <span>{item}</span>
+                            {isSelected && <Check className="h-3.5 w-3.5 text-indigo-600 shrink-0" />}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="p-2.5 text-center text-xs text-slate-400 font-medium">
+                        No existing marks matching "{mark}"
+                      </div>
+                    )}
+
+                    {mark.trim() && !availableMarks.some(m => m.toUpperCase() === mark.trim().toUpperCase()) && (
+                      <div
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setIsMarkDropdownOpen(false);
+                        }}
+                        className="mt-1 pt-1 border-t border-slate-100 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 rounded-xl cursor-pointer text-xs font-bold flex items-center gap-1.5 transition-colors uppercase font-mono"
+                      >
+                        <Plus className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                        <span className="truncate">Add new mark & save: "{mark.trim().toUpperCase()}"</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Weight Restriction Note */}
