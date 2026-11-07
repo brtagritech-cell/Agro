@@ -44,9 +44,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
   const [subUrl, setSubUrl] = useState('');
   const [ownerId, setOwnerId] = useState('');
   const [ownerPassword, setOwnerPassword] = useState('');
-  const [subUsersText, setSubUsersText] = useState('');
-  const [marksText, setMarksText] = useState('');
-  const [agentsText, setAgentsText] = useState('');
+  
+  // Dynamic form fields
+  const [subUsersList, setSubUsersList] = useState<{ name: string; password: string }[]>([]);
+  const [newSubUserName, setNewSubUserName] = useState('');
+  const [newSubUserPassword, setNewSubUserPassword] = useState('');
+
+  const [marksList, setMarksList] = useState<string[]>([]);
+  const [newMarkInput, setNewMarkInput] = useState('');
+
+  const [agentsList, setAgentsList] = useState<string[]>([]);
+  const [newAgentInput, setNewAgentInput] = useState('');
+
   const [formError, setFormError] = useState('');
 
 
@@ -82,10 +91,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
     setEditingTenant(null);
     setSubUrl('');
     setOwnerId('');
-    setOwnerPassword('');
-    setSubUsersText('Ramesh:1234, Suresh:1234, Patel:1234, BVB:1234');
-    setMarksText('Agro, BRT, RS, TS, DV, BVB');
-    setAgentsText('Ramesh Kumar, Suresh & Sons, Patel Agro, BVB Agencies');
+    setOwnerPassword('1234');
+    setSubUsersList([
+      { name: 'Ramesh', password: '1234' },
+      { name: 'Suresh', password: '1234' },
+      { name: 'Patel', password: '1234' },
+      { name: 'BVB', password: '1234' }
+    ]);
+    setNewSubUserName('');
+    setNewSubUserPassword('');
+    setMarksList(['AGRO', 'BRT', 'RS', 'TS', 'DV', 'BVB']);
+    setNewMarkInput('');
+    setAgentsList(['Ramesh Kumar', 'Suresh & Sons', 'Patel Agro', 'BVB Agencies']);
+    setNewAgentInput('');
     setFormError('');
     setIsFormOpen(true);
   };
@@ -97,17 +115,85 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
     setOwnerId(tenant.ownerId);
     setOwnerPassword(tenant.ownerPassword);
     
-    // Format sub-users back to name:password pairs for editing
-    const subUsersFormatted = (tenant.subUsers || []).map(name => {
-      const pwd = tenant.subUserPasswords?.[name];
-      return pwd ? `${name}:${pwd}` : name;
-    }).join(', ');
-    setSubUsersText(subUsersFormatted);
+    // Format sub-users
+    const formattedSubUsers = (tenant.subUsers || []).map(name => ({
+      name,
+      password: (tenant.subUserPasswords && tenant.subUserPasswords[name]) ? String(tenant.subUserPasswords[name]) : tenant.ownerPassword || '1234'
+    }));
+    setSubUsersList(formattedSubUsers);
+    setNewSubUserName('');
+    setNewSubUserPassword('');
     
-    setMarksText((tenant.marks || []).join(', '));
-    setAgentsText((tenant.agents || []).join(', '));
+    setMarksList([...(tenant.marks || [])]);
+    setNewMarkInput('');
+    
+    setAgentsList([...(tenant.agents || [])]);
+    setNewAgentInput('');
+    
     setFormError('');
     setIsFormOpen(true);
+  };
+
+  const handleAddSubUser = () => {
+    const trimmedName = newSubUserName.trim();
+    if (trimmedName) {
+      setSubUsersList(prev => [
+        ...prev,
+        {
+          name: trimmedName,
+          password: newSubUserPassword.trim() || ownerPassword.trim() || '1234'
+        }
+      ]);
+      setNewSubUserName('');
+      setNewSubUserPassword('');
+    } else {
+      // Add empty row for manual editing in place
+      setSubUsersList(prev => [
+        ...prev,
+        {
+          name: '',
+          password: ownerPassword.trim() || '1234'
+        }
+      ]);
+    }
+  };
+
+  const handleUpdateSubUser = (index: number, field: 'name' | 'password', value: string) => {
+    setSubUsersList(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const handleRemoveSubUser = (index: number) => {
+    setSubUsersList(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddMark = () => {
+    const trimmed = newMarkInput.trim().toUpperCase();
+    if (!trimmed) return;
+    if (!marksList.includes(trimmed)) {
+      setMarksList(prev => [...prev, trimmed]);
+    }
+    setNewMarkInput('');
+  };
+
+  const handleRemoveMark = (index: number) => {
+    setMarksList(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddAgent = () => {
+    const trimmed = newAgentInput.trim();
+    if (!trimmed) return;
+    if (!agentsList.includes(trimmed)) {
+      setAgentsList(prev => [...prev, trimmed]);
+    }
+    setNewAgentInput('');
+  };
+
+  const handleRemoveAgent = (index: number) => {
+    setAgentsList(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSaveTenant = (e: React.FormEvent) => {
@@ -125,39 +211,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
       return;
     }
 
-    const marks = marksText
-      .split(',')
-      .map(m => m.trim().toUpperCase())
-      .filter(m => m.length > 0);
+    // Auto-commit any pending mark in newMarkInput
+    let finalMarks = [...marksList];
+    if (newMarkInput.trim()) {
+      const pendingMark = newMarkInput.trim().toUpperCase();
+      if (!finalMarks.includes(pendingMark)) {
+        finalMarks.push(pendingMark);
+      }
+    }
 
-    if (marks.length === 0) {
+    if (finalMarks.length === 0) {
       setFormError('At least one Brand Mark must be configured.');
       return;
+    }
+
+    // Auto-commit any pending agent in newAgentInput
+    let finalAgents = [...agentsList];
+    if (newAgentInput.trim()) {
+      const pendingAgent = newAgentInput.trim();
+      if (!finalAgents.includes(pendingAgent)) {
+        finalAgents.push(pendingAgent);
+      }
+    }
+
+    // Auto-commit any pending sub-user in newSubUserName
+    let finalSubUsersList = [...subUsersList];
+    if (newSubUserName.trim()) {
+      finalSubUsersList.push({
+        name: newSubUserName.trim(),
+        password: newSubUserPassword.trim() || ownerPassword.trim() || '1234'
+      });
     }
 
     const subUsers: string[] = [];
     const subUserPasswords: { [username: string]: string } = {};
 
-    subUsersText
-      .split(',')
-      .map(u => u.trim())
-      .filter(u => u.length > 0)
-      .forEach(item => {
-        const parts = item.split(':');
-        const name = parts[0]?.trim();
-        const pwd = parts[1]?.trim();
-        if (name) {
+    finalSubUsersList.forEach(item => {
+      const name = item.name.trim();
+      if (name) {
+        if (!subUsers.includes(name)) {
           subUsers.push(name);
-          if (pwd) {
-            subUserPasswords[name] = pwd;
-          }
         }
-      });
-
-    const agents = agentsText
-      .split(',')
-      .map(a => a.trim())
-      .filter(a => a.length > 0);
+        subUserPasswords[name] = item.password.trim() || ownerPassword.trim() || '1234';
+      }
+    });
 
     const newTenant: TenantConfig = {
       subUrl: normalizedPath,
@@ -166,14 +263,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
       ownerPassword: ownerPassword.trim(),
       subUsers,
       subUserPasswords,
-      marks,
-      agents
+      marks: finalMarks,
+      agents: finalAgents
     };
 
     let updatedTenants = [...tenants];
     if (formType === 'create') {
       // Check duplicate subUrl
-      if (tenants.some(t => t.subUrl === normalizedPath)) {
+      if (tenants.some(t => t.subUrl.toLowerCase() === normalizedPath.toLowerCase())) {
         setFormError(`Sub-URL path ${normalizedPath} already exists.`);
         return;
       }
@@ -697,52 +794,228 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                 </div>
               </div>
 
-              {/* Sub-Users List */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Authorized Sub-Users (Comma-separated, optional passwords like Ramesh:1234)
-                </label>
-                <textarea
-                  rows={2}
-                  required
-                  placeholder="e.g. Ramesh:1234, Suresh:1234, Patel"
-                  value={subUsersText}
-                  onChange={(e) => setSubUsersText(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-medium"
-                />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Format: <code className="bg-slate-100 px-1 rounded">Name:Passcode</code>. If no passcode is set, the Owner passcode is used.
-                </p>
+              {/* Authorized Sub-Users Section */}
+              <div className="space-y-2.5 border border-slate-200 rounded-2xl p-3.5 bg-slate-50/70">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Authorized Sub-Users ({subUsersList.length})
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    Name & Passcode mapping
+                  </span>
+                </div>
+
+                {/* Sub-users list */}
+                {subUsersList.length > 0 && (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    <div className="grid grid-cols-12 gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
+                      <div className="col-span-6 sm:col-span-7">Sub-User Name</div>
+                      <div className="col-span-5 sm:col-span-4">Password / Passcode</div>
+                      <div className="col-span-1 text-center"></div>
+                    </div>
+                    {subUsersList.map((su, idx) => (
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                        <div className="col-span-6 sm:col-span-7">
+                          <input
+                            type="text"
+                            placeholder="e.g. Ramesh"
+                            value={su.name}
+                            onChange={(e) => handleUpdateSubUser(idx, 'name', e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:bg-white text-xs font-semibold text-slate-800 transition-all shadow-2xs"
+                          />
+                        </div>
+                        <div className="col-span-5 sm:col-span-4">
+                          <input
+                            type="text"
+                            placeholder="Passcode"
+                            value={su.password}
+                            onChange={(e) => handleUpdateSubUser(idx, 'password', e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:bg-white text-xs font-mono font-bold text-slate-800 transition-all shadow-2xs"
+                          />
+                        </div>
+                        <div className="col-span-1 flex justify-center">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSubUser(idx)}
+                            title="Remove sub-user"
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add New Sub-User Input Row */}
+                <div className="pt-2 border-t border-slate-200/80">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        placeholder="New sub-user name (e.g. Ramesh)"
+                        value={newSubUserName}
+                        onChange={(e) => setNewSubUserName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddSubUser();
+                          }
+                        }}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:border-indigo-600 text-xs font-semibold text-slate-800 transition-all shadow-2xs"
+                      />
+                    </div>
+                    <div className="w-full sm:w-44">
+                      <input
+                        type="text"
+                        placeholder="Password (e.g. 1234)"
+                        value={newSubUserPassword}
+                        onChange={(e) => setNewSubUserPassword(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddSubUser();
+                          }
+                        }}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:border-indigo-600 text-xs font-mono font-bold text-slate-800 transition-all shadow-2xs"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddSubUser}
+                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-600/20 transition-all shrink-0 active:scale-95"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Sub-User
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1.5">
+                    If password is left blank, the Owner passcode is used by default.
+                  </p>
+                </div>
               </div>
 
-              {/* Brand Marks */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Allowed Marks / Brands (Comma-separated)
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. BRT, RS, TS"
-                  value={marksText}
-                  onChange={(e) => setMarksText(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-bold font-mono uppercase"
-                />
+              {/* Brand Marks Section */}
+              <div className="space-y-2.5 border border-slate-200 rounded-2xl p-3.5 bg-slate-50/70">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Allowed Marks / Brands ({marksList.length})
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    At least one brand mark required
+                  </span>
+                </div>
+
+                {/* Add Mark Input Row */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Enter mark name (e.g. BRT, RS, TS)"
+                    value={newMarkInput}
+                    onChange={(e) => setNewMarkInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddMark();
+                      }
+                    }}
+                    className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl focus:border-indigo-600 text-xs font-bold font-mono uppercase text-slate-800 transition-all shadow-2xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddMark}
+                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm shadow-indigo-600/20 transition-all shrink-0 active:scale-95"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Mark
+                  </button>
+                </div>
+
+                {/* Added Marks Display List */}
+                <div className="flex flex-wrap gap-1.5 p-2.5 bg-white border border-slate-200 rounded-xl min-h-[44px] items-center">
+                  {marksList.length === 0 ? (
+                    <span className="text-[11px] text-slate-400 italic">No marks added yet. Enter a mark name above and click Add Mark.</span>
+                  ) : (
+                    marksList.map((m, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 border border-indigo-150 text-indigo-800 font-bold font-mono text-xs rounded-lg shadow-2xs group"
+                      >
+                        <span>{m}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveMark(idx)}
+                          className="text-indigo-400 hover:text-rose-600 hover:bg-rose-50 p-0.5 rounded transition-colors"
+                          title={`Remove ${m}`}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
               </div>
 
-              {/* Allowed Agents */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Allowed Commission Agent Names (Comma-separated)
-                </label>
-                <textarea
-                  rows={2}
-                  required
-                  placeholder="e.g. Ramesh Kumar, Suresh & Sons, Patel Agro"
-                  value={agentsText}
-                  onChange={(e) => setAgentsText(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-medium"
-                />
+              {/* Commission Agents Section */}
+              <div className="space-y-2.5 border border-slate-200 rounded-2xl p-3.5 bg-slate-50/70">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Allowed Commission Agent Names ({agentsList.length})
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    Commission agents for transactions
+                  </span>
+                </div>
+
+                {/* Add Agent Input Row */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Enter commission agent name (e.g. Patel Agro)"
+                    value={newAgentInput}
+                    onChange={(e) => setNewAgentInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddAgent();
+                      }
+                    }}
+                    className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl focus:border-indigo-600 text-xs font-medium text-slate-800 transition-all shadow-2xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddAgent}
+                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm shadow-indigo-600/20 transition-all shrink-0 active:scale-95"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Agent
+                  </button>
+                </div>
+
+                {/* Added Agents Display List */}
+                <div className="flex flex-wrap gap-1.5 p-2.5 bg-white border border-slate-200 rounded-xl min-h-[44px] items-center">
+                  {agentsList.length === 0 ? (
+                    <span className="text-[11px] text-slate-400 italic">No agent names added yet. Enter an agent name above and click Add Agent.</span>
+                  ) : (
+                    agentsList.map((a, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold text-xs rounded-lg shadow-2xs group"
+                      >
+                        <span>{a}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAgent(idx)}
+                          className="text-emerald-500 hover:text-rose-600 hover:bg-rose-50 p-0.5 rounded transition-colors"
+                          title={`Remove ${a}`}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
               </div>
 
               <div className="flex gap-2 justify-end pt-3">
