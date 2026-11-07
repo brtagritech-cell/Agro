@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { X, Scale, Info } from 'lucide-react';
 import type { Transaction } from '../services/sheetService';
-import { getCurrentTenant, updateWeight } from '../services/sheetService';
+import { getCurrentTenant } from '../services/sheetService';
 
 interface ViewWeightDetailsModalProps {
   transaction: Transaction;
@@ -11,36 +11,11 @@ interface ViewWeightDetailsModalProps {
 
 export const ViewWeightDetailsModal: React.FC<ViewWeightDetailsModalProps> = ({
   transaction,
-  onClose,
-  onUpdate
+  onClose
 }) => {
   const currentTenant = getCurrentTenant();
   const bagCost = currentTenant?.bagCost ?? 25;
   const taram = currentTenant?.taram ?? 1.100;
-
-  const [selectedMark, setSelectedMark] = useState(transaction.mark);
-  const [isUpdatingMark, setIsUpdatingMark] = useState(false);
-
-  const handleUpdateMark = async () => {
-    setIsUpdatingMark(true);
-    const res = await updateWeight(
-      transaction.transactionId,
-      undefined, // weight
-      undefined, // subUserRate
-      undefined, // rateReason
-      undefined, // bags
-      selectedMark // mark
-    );
-    setIsUpdatingMark(false);
-    if (res.success) {
-      alert('Brand/Mark Name updated successfully!');
-      if (onUpdate) {
-        onUpdate();
-      }
-    } else {
-      alert('Failed to update Brand/Mark: ' + res.message);
-    }
-  };
 
   // Helper to parse weights: "150.600 kg [50.200, 50.100, 50.300]" -> ["50.200", "50.100", "50.300"]
   const parseBagWeights = (weightStr: string): string[] => {
@@ -107,7 +82,7 @@ export const ViewWeightDetailsModal: React.FC<ViewWeightDetailsModalProps> = ({
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-1 text-slate-600 font-medium pt-1.5 border-t border-slate-200/50">
             <div>Agent Name: <span className="text-slate-800 font-bold break-words">{transaction.agent}</span></div>
-            <div>Mark: <span className="text-slate-800 font-bold uppercase">{transaction.mark}</span></div>
+            <div>Mark: <span className="inline-block px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200/80 rounded font-bold uppercase text-xs font-mono">{transaction.mark}</span></div>
             <div>Bags: <span className="text-slate-800 font-bold font-mono">{totalBags} Bags</span></div>
             <div>Owner Rate: <span className="text-slate-800 font-bold font-mono">{formatINR(transaction.rate)}</span></div>
             <div className="sm:col-span-2 border-t border-slate-200/30 pt-1 mt-0.5 grid grid-cols-1 sm:grid-cols-2 gap-y-1">
@@ -121,30 +96,6 @@ export const ViewWeightDetailsModal: React.FC<ViewWeightDetailsModalProps> = ({
                 Rate Mod Reason: <span className="font-bold">{transaction.rateReason}</span>
               </div>
             )}
-            <div className="sm:col-span-2 border-t border-slate-200/30 pt-2 mt-1 flex flex-wrap items-center justify-between gap-2">
-              <span className="font-semibold text-slate-500 uppercase tracking-wider text-[10px]">Change Brand/Mark:</span>
-              <div className="flex items-center gap-1.5">
-                <select
-                  value={selectedMark}
-                  onChange={(e) => setSelectedMark(e.target.value)}
-                  className="px-2 py-1 bg-white border border-slate-200 focus:border-emerald-500 rounded text-xs font-bold uppercase cursor-pointer"
-                >
-                  {(currentTenant?.marks || []).map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleUpdateMark}
-                  disabled={selectedMark === transaction.mark || isUpdatingMark}
-                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg transition-all disabled:opacity-50 shrink-0 cursor-pointer"
-                >
-                  {isUpdatingMark ? '...' : 'Update'}
-                </button>
-              </div>
-            </div>
           </div>
         </div>
 
