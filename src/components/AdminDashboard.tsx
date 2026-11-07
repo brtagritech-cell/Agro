@@ -57,6 +57,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
   const [newAgentInput, setNewAgentInput] = useState('');
 
   const [formError, setFormError] = useState('');
+  const [subUserError, setSubUserError] = useState('');
+  const [markError, setMarkError] = useState('');
+  const [agentError, setAgentError] = useState('');
 
 
 
@@ -105,6 +108,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
     setAgentsList(['Ramesh Kumar', 'Suresh & Sons', 'Patel Agro', 'BVB Agencies']);
     setNewAgentInput('');
     setFormError('');
+    setSubUserError('');
+    setMarkError('');
+    setAgentError('');
     setIsFormOpen(true);
   };
 
@@ -131,31 +137,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
     setNewAgentInput('');
     
     setFormError('');
+    setSubUserError('');
+    setMarkError('');
+    setAgentError('');
     setIsFormOpen(true);
   };
 
   const handleAddSubUser = () => {
     const trimmedName = newSubUserName.trim();
-    if (trimmedName) {
-      setSubUsersList(prev => [
-        ...prev,
-        {
-          name: trimmedName,
-          password: newSubUserPassword.trim() || ownerPassword.trim() || '1234'
-        }
-      ]);
-      setNewSubUserName('');
-      setNewSubUserPassword('');
-    } else {
-      // Add empty row for manual editing in place
-      setSubUsersList(prev => [
-        ...prev,
-        {
-          name: '',
-          password: ownerPassword.trim() || '1234'
-        }
-      ]);
+    const trimmedPass = newSubUserPassword.trim();
+
+    if (!trimmedName && !trimmedPass) {
+      setSubUserError('Please enter sub-user name and password before adding.');
+      return;
     }
+
+    if (!trimmedName) {
+      setSubUserError('Please enter a sub-user name before adding.');
+      return;
+    }
+
+    if (!trimmedPass) {
+      setSubUserError('Please enter a sub-user password before adding.');
+      return;
+    }
+
+    if (subUsersList.some(su => su.name.toLowerCase() === trimmedName.toLowerCase())) {
+      setSubUserError(`Sub-user "${trimmedName}" is already added.`);
+      return;
+    }
+
+    setSubUsersList(prev => [
+      ...prev,
+      {
+        name: trimmedName,
+        password: trimmedPass
+      }
+    ]);
+    setNewSubUserName('');
+    setNewSubUserPassword('');
+    setSubUserError('');
   };
 
   const handleUpdateSubUser = (index: number, field: 'name' | 'password', value: string) => {
@@ -172,11 +193,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
 
   const handleAddMark = () => {
     const trimmed = newMarkInput.trim().toUpperCase();
-    if (!trimmed) return;
-    if (!marksList.includes(trimmed)) {
-      setMarksList(prev => [...prev, trimmed]);
+    if (!trimmed) {
+      setMarkError('Please enter a brand mark before adding.');
+      return;
     }
+    if (marksList.includes(trimmed)) {
+      setMarkError(`Brand Mark "${trimmed}" is already added.`);
+      return;
+    }
+    setMarksList(prev => [...prev, trimmed]);
     setNewMarkInput('');
+    setMarkError('');
   };
 
   const handleRemoveMark = (index: number) => {
@@ -185,11 +212,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
 
   const handleAddAgent = () => {
     const trimmed = newAgentInput.trim();
-    if (!trimmed) return;
-    if (!agentsList.includes(trimmed)) {
-      setAgentsList(prev => [...prev, trimmed]);
+    if (!trimmed) {
+      setAgentError('Please enter a commission agent name before adding.');
+      return;
     }
+    if (agentsList.some(a => a.toLowerCase() === trimmed.toLowerCase())) {
+      setAgentError(`Commission Agent "${trimmed}" is already added.`);
+      return;
+    }
+    setAgentsList(prev => [...prev, trimmed]);
     setNewAgentInput('');
+    setAgentError('');
   };
 
   const handleRemoveAgent = (index: number) => {
@@ -856,14 +889,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                         type="text"
                         placeholder="New sub-user name (e.g. Ramesh)"
                         value={newSubUserName}
-                        onChange={(e) => setNewSubUserName(e.target.value)}
+                        onChange={(e) => {
+                          setNewSubUserName(e.target.value);
+                          if (subUserError) setSubUserError('');
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
                             handleAddSubUser();
                           }
                         }}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:border-indigo-600 text-xs font-semibold text-slate-800 transition-all shadow-2xs"
+                        className={`w-full px-3 py-2 bg-white border rounded-xl focus:border-indigo-600 text-xs font-semibold text-slate-800 transition-all shadow-2xs ${
+                          subUserError && !newSubUserName.trim() ? 'border-rose-400 ring-1 ring-rose-200' : 'border-slate-200'
+                        }`}
                       />
                     </div>
                     <div className="w-full sm:w-44">
@@ -871,14 +909,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                         type="text"
                         placeholder="Password (e.g. 1234)"
                         value={newSubUserPassword}
-                        onChange={(e) => setNewSubUserPassword(e.target.value)}
+                        onChange={(e) => {
+                          setNewSubUserPassword(e.target.value);
+                          if (subUserError) setSubUserError('');
+                        }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
                             handleAddSubUser();
                           }
                         }}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:border-indigo-600 text-xs font-mono font-bold text-slate-800 transition-all shadow-2xs"
+                        className={`w-full px-3 py-2 bg-white border rounded-xl focus:border-indigo-600 text-xs font-mono font-bold text-slate-800 transition-all shadow-2xs ${
+                          subUserError && !newSubUserPassword.trim() ? 'border-rose-400 ring-1 ring-rose-200' : 'border-slate-200'
+                        }`}
                       />
                     </div>
                     <button
@@ -890,9 +933,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                       Add Sub-User
                     </button>
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1.5">
-                    If password is left blank, the Owner passcode is used by default.
-                  </p>
+                  
+                  {subUserError ? (
+                    <div className="flex items-center gap-1.5 p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold mt-2 animate-fadeIn">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                      <span>{subUserError}</span>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-400 mt-1.5">
+                      Both sub-user name and passcode are required when adding a new sub-user.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -913,14 +964,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                     type="text"
                     placeholder="Enter mark name (e.g. BRT, RS, TS)"
                     value={newMarkInput}
-                    onChange={(e) => setNewMarkInput(e.target.value)}
+                    onChange={(e) => {
+                      setNewMarkInput(e.target.value);
+                      if (markError) setMarkError('');
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         handleAddMark();
                       }
                     }}
-                    className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl focus:border-indigo-600 text-xs font-bold font-mono uppercase text-slate-800 transition-all shadow-2xs"
+                    className={`flex-1 px-3 py-2 bg-white border rounded-xl focus:border-indigo-600 text-xs font-bold font-mono uppercase text-slate-800 transition-all shadow-2xs ${
+                      markError ? 'border-rose-400 ring-1 ring-rose-200' : 'border-slate-200'
+                    }`}
                   />
                   <button
                     type="button"
@@ -931,6 +987,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                     Add Mark
                   </button>
                 </div>
+
+                {markError && (
+                  <div className="flex items-center gap-1.5 p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold animate-fadeIn">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                    <span>{markError}</span>
+                  </div>
+                )}
 
                 {/* Added Marks Display List */}
                 <div className="flex flex-wrap gap-1.5 p-2.5 bg-white border border-slate-200 rounded-xl min-h-[44px] items-center">
@@ -974,14 +1037,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                     type="text"
                     placeholder="Enter commission agent name (e.g. Patel Agro)"
                     value={newAgentInput}
-                    onChange={(e) => setNewAgentInput(e.target.value)}
+                    onChange={(e) => {
+                      setNewAgentInput(e.target.value);
+                      if (agentError) setAgentError('');
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         handleAddAgent();
                       }
                     }}
-                    className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl focus:border-indigo-600 text-xs font-medium text-slate-800 transition-all shadow-2xs"
+                    className={`flex-1 px-3 py-2 bg-white border rounded-xl focus:border-indigo-600 text-xs font-medium text-slate-800 transition-all shadow-2xs ${
+                      agentError ? 'border-rose-400 ring-1 ring-rose-200' : 'border-slate-200'
+                    }`}
                   />
                   <button
                     type="button"
@@ -992,6 +1060,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                     Add Agent
                   </button>
                 </div>
+
+                {agentError && (
+                  <div className="flex items-center gap-1.5 p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold animate-fadeIn">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                    <span>{agentError}</span>
+                  </div>
+                )}
 
                 {/* Added Agents Display List */}
                 <div className="flex flex-wrap gap-1.5 p-2.5 bg-white border border-slate-200 rounded-xl min-h-[44px] items-center">
