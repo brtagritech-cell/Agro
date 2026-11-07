@@ -12,9 +12,12 @@ import {
   AlertCircle,
   ArrowRight,
   Globe,
-  Upload
+  Upload,
+  Zap
 } from 'lucide-react';
 import { getTenants, saveTenants, type TenantConfig, normalizeSubUrl } from '../services/sheetService';
+import { SupabaseConnectModal } from './SupabaseConnectModal';
+import { getSupabaseCredentials } from '../services/supabaseClient';
 
 interface AdminDashboardProps {
   onExitAdmin: () => void;
@@ -34,6 +37,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
   const [editingTenant, setEditingTenant] = useState<TenantConfig | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formType, setFormType] = useState<'create' | 'edit'>('create');
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
+  const [supabaseCreds, setSupabaseCreds] = useState(getSupabaseCredentials());
 
   // Form fields
   const [subUrl, setSubUrl] = useState('');
@@ -315,7 +320,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
   };
 
   const handleDeleteTenant = (pathToDelete: string) => {
-    if (pathToDelete === '/Agro/' || pathToDelete === '/BRT/' || pathToDelete === tenants[0]?.subUrl) {
+    if (['/spicelink/', '/agro/', '/brt/'].includes(pathToDelete.toLowerCase()) || pathToDelete === tenants[0]?.subUrl) {
       alert('Cannot delete the default root tenant profile.');
       return;
     }
@@ -449,28 +454,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
         
         {/* Supabase Connection Status Card */}
         <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-soft space-y-3 sm:space-y-4">
-          <div className="flex items-center gap-2">
-            <Globe className="h-5 w-5 text-emerald-600 animate-pulse shrink-0" />
-            <h3 className="text-xs sm:text-sm font-bold text-slate-800 uppercase tracking-wider">
-              Supabase Database Connection
-            </h3>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Globe className="h-5 w-5 text-emerald-600 animate-pulse shrink-0" />
+              <h3 className="text-xs sm:text-sm font-bold text-slate-800 uppercase tracking-wider">
+                Supabase Database Connection
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsSupabaseModalOpen(true)}
+              className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/80 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Zap className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Configure / Paste Credentials</span>
+            </button>
           </div>
           <p className="text-xs text-slate-500 max-w-2xl leading-relaxed">
-            The application is connected to the Supabase PostgreSQL database configured in your build environment. Syncing and real-time updates are active.
+            The application communicates directly with the Supabase PostgreSQL database. You can paste a new Project URL and API Key at any time without rebuilding.
           </p>
           <div className="bg-slate-50 p-3 sm:p-4 rounded-xl border border-slate-200/50 flex flex-col gap-2 font-mono text-xs text-slate-700">
             <div>
               <span className="text-slate-400 font-semibold uppercase text-[9px] block">Database URL</span>
-              <span className="font-semibold break-all text-[11px] sm:text-xs">{import.meta.env.VITE_SUPABASE_URL || '🔴 Not Configured'}</span>
+              <span className="font-semibold break-all text-[11px] sm:text-xs">{supabaseCreds.url || '🔴 Not Configured (Local Mock Mode)'}</span>
             </div>
             <div>
               <span className="text-slate-400 font-semibold uppercase text-[9px] block">Connection Status</span>
               <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border mt-1 uppercase ${
-                import.meta.env.VITE_SUPABASE_URL 
+                supabaseCreds.url && supabaseCreds.anonKey
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                   : 'bg-amber-50 text-amber-700 border-amber-200'
               }`}>
-                {import.meta.env.VITE_SUPABASE_URL ? (
+                {supabaseCreds.url && supabaseCreds.anonKey ? (
                   <>
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     <span>Connected</span>
@@ -542,7 +557,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                     </button>
                     <button
                       onClick={() => handleDeleteTenant(t.subUrl)}
-                      disabled={t.subUrl === '/Agro/' || t.subUrl === '/BRT/' || t.subUrl === tenants[0]?.subUrl}
+                      disabled={['/spicelink/', '/agro/', '/brt/'].includes(t.subUrl.toLowerCase()) || t.subUrl === tenants[0]?.subUrl}
                       className="p-1.5 hover:bg-rose-50 text-slate-600 hover:text-rose-600 rounded-lg transition-all border border-transparent hover:border-rose-100 disabled:opacity-50"
                       title="Delete Branch Profile"
                     >
@@ -637,7 +652,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                 <input
                   type="text"
                   required
-                  disabled={formType === 'edit' && (editingTenant?.subUrl === '/Agro/' || editingTenant?.subUrl === '/BRT/' || editingTenant?.subUrl === tenants[0]?.subUrl)}
+                  disabled={formType === 'edit' && (['/spicelink/', '/agro/', '/brt/'].includes(editingTenant?.subUrl.toLowerCase() || '') || editingTenant?.subUrl === tenants[0]?.subUrl)}
                   placeholder="e.g. /Agro/Test1/"
                   value={subUrl}
                   onChange={(e) => setSubUrl(e.target.value)}
@@ -750,6 +765,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
           </div>
         </div>
       )}
+      {/* Supabase Connect Modal */}
+      <SupabaseConnectModal
+        isOpen={isSupabaseModalOpen}
+        onClose={() => setIsSupabaseModalOpen(false)}
+        onConnected={() => setSupabaseCreds(getSupabaseCredentials())}
+      />
     </div>
   );
 };

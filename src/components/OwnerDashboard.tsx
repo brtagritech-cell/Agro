@@ -4,15 +4,17 @@ import {
   Plus, 
   Lock, 
   AlertTriangle,
-  X,
-  FileText,
-  CheckCircle,
-  HelpCircle,
-  Clock,
-  Database
+  X, 
+  FileText, 
+  CheckCircle, 
+  HelpCircle, 
+  Clock, 
+  Database,
+  Zap
 } from 'lucide-react';
 import { type Transaction, getShortAgentName, isGoogleSheetsEnabled, getCurrentTenant, getTenants, saveTenants } from '../services/sheetService';
 import { ViewWeightDetailsModal } from './ViewWeightDetailsModal';
+import { SupabaseConnectModal } from './SupabaseConnectModal';
 
 const getTodayISTString = (): string => {
   try {
@@ -72,6 +74,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const [rate, setRate] = useState('');
   const [agent, setAgent] = useState('');
   const [mark, setMark] = useState<string>((currentTenant?.marks || [])[0] || 'BRT');
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
 
   useEffect(() => {
     if (currentTenant?.marks && currentTenant.marks.length > 0) {
@@ -371,23 +374,28 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
           <h2 className="text-lg sm:text-xl font-bold text-slate-800">Owner Terminal</h2>
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-0.5">
             <span className="text-xs text-slate-500">Control hub and transaction scheduler</span>
-            <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full select-none leading-none border uppercase tracking-wider font-mono ${
-              isGoogleSheetsEnabled() 
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                : 'bg-amber-50 text-amber-700 border-amber-200'
-            }`}>
+            <button
+              type="button"
+              onClick={() => setIsSupabaseModalOpen(true)}
+              title="Click to configure Supabase Database connection"
+              className={`inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full select-none leading-none border uppercase tracking-wider font-mono transition-all hover:scale-105 cursor-pointer ${
+                isGoogleSheetsEnabled() 
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' 
+                  : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+              }`}
+            >
               {isGoogleSheetsEnabled() ? (
                 <>
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Supabase Connected</span>
+                  <span>Supabase Connected ⚙️</span>
                 </>
               ) : (
                 <>
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                  <span>Local Mock Mode</span>
+                  <span>Local Mock Mode (Connect ⚡)</span>
                 </>
               )}
-            </span>
+            </button>
           </div>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
@@ -416,15 +424,24 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
       {/* Supabase Sync Info Banner */}
       {!isGoogleSheetsEnabled() && (
-        <div className="p-3.5 sm:p-4 bg-amber-50/60 border border-amber-100/80 text-amber-800 rounded-2xl flex items-start gap-3 text-xs leading-relaxed shadow-soft">
-          <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-          <div className="space-y-0.5">
-            <p className="font-bold">Supabase Database Sync is not configured</p>
-            <p className="text-amber-700/90 font-medium">
-              You are currently running in <strong>Local Mock Mode</strong>. Data changes are only saved locally on this browser. 
-              To configure multi-device sync, please set the <strong>VITE_SUPABASE_URL</strong> and <strong>VITE_SUPABASE_ANON_KEY</strong> in your <strong>.env</strong> file.
-            </p>
+        <div className="p-3.5 sm:p-4 bg-amber-50/60 border border-amber-100/80 text-amber-800 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs leading-relaxed shadow-soft">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <p className="font-bold">Supabase Database Sync is not configured</p>
+              <p className="text-amber-700/90 font-medium">
+                You are currently running in <strong>Local Mock Mode</strong>. Paste your Supabase Project URL and Anon Key to sync live across devices.
+              </p>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={() => setIsSupabaseModalOpen(true)}
+            className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl transition-all shadow-sm flex items-center gap-1.5 shrink-0 text-xs cursor-pointer"
+          >
+            <Zap className="h-3.5 w-3.5" />
+            <span>Connect Supabase Now</span>
+          </button>
         </div>
       )}
 
@@ -981,6 +998,13 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Supabase Connect Modal */}
+      <SupabaseConnectModal
+        isOpen={isSupabaseModalOpen}
+        onClose={() => setIsSupabaseModalOpen(false)}
+        onConnected={onRefresh}
+      />
 
     </div>
   );

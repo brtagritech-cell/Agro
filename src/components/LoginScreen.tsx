@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { ShieldCheck, User, Lock, AlertCircle, Settings } from 'lucide-react';
+import { ShieldCheck, User, Lock, AlertCircle, Settings, Zap } from 'lucide-react';
 import { getCurrentTenant, getCurrentSubUrl } from '../services/sheetService';
+import { SupabaseConnectModal } from './SupabaseConnectModal';
+import { getSupabaseCredentials } from '../services/supabaseClient';
 
 interface LoginScreenProps {
   onLoginSuccess: (role: 'Owner' | 'Sub-User', subUserName?: string) => void;
@@ -42,6 +44,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onEnte
   const [subUserNameInput, setSubUserNameInput] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
+  const [supabaseCreds, setSupabaseCreds] = useState(getSupabaseCredentials());
+
+  const handleSupabaseUpdated = () => {
+    setSupabaseCreds(getSupabaseCredentials());
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,6 +72,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onEnte
       if (role === 'Owner') {
         const isOwnerIdValid = 
           cleanUserId.toUpperCase() === expectedOwnerId.toUpperCase() ||
+          cleanUserId.toUpperCase() === 'SPICELINK' ||
           cleanUserId.toUpperCase() === 'AGRO' ||
           cleanUserId.toUpperCase() === 'BRT';
         const isPasswordValid = 
@@ -96,12 +105,42 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onEnte
       <div className="w-full max-w-md bg-white rounded-2xl sm:rounded-3xl shadow-premium border border-slate-100 overflow-hidden relative p-5 sm:p-8">
         
         {/* Brand Header */}
-        <div className="flex flex-col items-center mb-6 sm:mb-8">
+        <div className="flex flex-col items-center mb-5 sm:mb-6">
           <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-600/30 mb-2.5 sm:mb-3 animate-fade-in">
             <ChilliLogo className="h-7 w-7 sm:h-8 sm:w-8" />
           </div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-800">AgroSync</h1>
           <p className="text-[11px] sm:text-xs text-slate-500 font-medium uppercase tracking-wider mt-0.5 sm:mt-1">Agricultural Transaction Hub</p>
+        </div>
+
+        {/* Cloud Database Connection Banner / Trigger (User Screenshot Feature) */}
+        <div className="mb-5">
+          <button
+            type="button"
+            onClick={() => setIsSupabaseModalOpen(true)}
+            className={`w-full p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-between transition-all group ${
+              supabaseCreds.url && supabaseCreds.anonKey
+                ? 'bg-emerald-50/70 border-emerald-200 text-emerald-800 hover:bg-emerald-100/60'
+                : 'bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-100/70 shadow-xs'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span className={`p-1 rounded-lg ${supabaseCreds.url ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                <Zap className="h-3.5 w-3.5" />
+              </span>
+              <div className="text-left">
+                <span className="block leading-tight font-bold">
+                  {supabaseCreds.url && supabaseCreds.anonKey ? 'Cloud Database Connected' : '⚡ Connect Cloud Database'}
+                </span>
+                <span className="text-[10px] text-slate-500 font-normal">
+                  {supabaseCreds.url ? 'Click to view / change credentials' : 'Paste Supabase API URL & Key'}
+                </span>
+              </div>
+            </div>
+            <span className="text-[11px] font-bold underline decoration-slate-300 group-hover:decoration-current">
+              {supabaseCreds.url ? 'Config ⚙️' : 'Connect Now ➔'}
+            </span>
+          </button>
         </div>
 
         {/* Role Selector Toggle */}
@@ -248,24 +287,40 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onEnte
         <div className="mt-6 p-3 bg-slate-50 rounded-xl border border-slate-200/50 text-center text-xs text-slate-500 break-words">
           <span className="block font-bold text-slate-400 uppercase tracking-wider text-[9px] mb-1">Active Site Route: {currentSubUrl}</span>
           {role === 'Owner' ? (
-            <span className="leading-relaxed">Use Owner credentials configured for this branch: ID <code className="bg-slate-200/60 px-1.5 py-0.5 rounded font-mono font-bold text-slate-700 break-all">{currentTenant?.ownerId || 'Agro'}</code> & PW <code className="bg-slate-200/60 px-1.5 py-0.5 rounded font-mono font-bold text-slate-700 break-all">{currentTenant?.ownerPassword || '1234'}</code></span>
+            <span className="leading-relaxed">Use Owner credentials configured for this branch: ID <code className="bg-slate-200/60 px-1.5 py-0.5 rounded font-mono font-bold text-slate-700 break-all">{currentTenant?.ownerId || 'Spicelink'}</code> & PW <code className="bg-slate-200/60 px-1.5 py-0.5 rounded font-mono font-bold text-slate-700 break-all">{currentTenant?.ownerPassword || '1234'}</code></span>
           ) : (
             <span className="leading-relaxed">Select your Sub-User name and use your specific passcode (defaults to owner's PW if not set)</span>
           )}
         </div>
 
-        {/* Admin Access Panel Link */}
-        <div className="mt-6 pt-4 border-t border-slate-100 flex justify-center">
+        {/* Admin & Database Access Panel Links */}
+        <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setIsSupabaseModalOpen(true)}
+            className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 px-2.5 py-1.5 rounded-lg transition-all"
+          >
+            <Zap className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Database Connection</span>
+          </button>
+
           <button
             type="button"
             onClick={onEnterAdmin}
-            className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-all"
+            className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 px-2.5 py-1.5 rounded-lg transition-all"
           >
             <Settings className="h-3.5 w-3.5" />
-            <span>AgroSync Master Admin Login</span>
+            <span>Master Admin Login</span>
           </button>
         </div>
       </div>
+
+      {/* Supabase Connect Modal */}
+      <SupabaseConnectModal
+        isOpen={isSupabaseModalOpen}
+        onClose={() => setIsSupabaseModalOpen(false)}
+        onConnected={handleSupabaseUpdated}
+      />
     </div>
   );
 };

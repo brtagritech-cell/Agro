@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+import { supabase, getSupabaseCredentials } from './supabaseClient';
 
 export interface Transaction {
   timestamp: string;
@@ -98,22 +98,21 @@ const TENANTS_STORAGE_KEY = 'agrosync_tenants_config';
 
 const DEFAULT_TENANTS: TenantConfig[] = [
   {
-    subUrl: '/Agro/',
+    subUrl: '/Spicelink/',
     sheetUrl: '',
-    ownerId: 'Agro',
+    ownerId: 'Spicelink',
     ownerPassword: '1234',
     subUsers: ['Ramesh', 'Suresh', 'Patel', 'BVB'],
     subUserPasswords: { Ramesh: '1234', Suresh: '1234', Patel: '1234', BVB: '1234' },
-    marks: ['Agro', 'BRT', 'RS', 'TS', 'DV', 'BVB'],
+    marks: ['Spicelink', 'Agro', 'BRT', 'RS', 'TS', 'DV', 'BVB'],
     agents: ['Ramesh Kumar', 'Suresh & Sons', 'Patel Agro', 'BVB Agencies'],
     fullLink: ''
   }
 ];
 
 export function isSupabaseEnabled(): boolean {
-  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
-  const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
-  return !!(supabaseUrl && supabaseAnonKey);
+  const { url, anonKey } = getSupabaseCredentials();
+  return !!(url && anonKey);
 }
 
 export function isGoogleSheetsEnabled(): boolean {
@@ -196,10 +195,10 @@ export function getCurrentTenant(): TenantConfig {
   }
   
   const tenants = getTenants();
+  const knownAliases = ['/spicelink/', '/agro/', '/brt/'];
   const match = tenants.find(t => 
     t.subUrl.toLowerCase() === currentSubUrl.toLowerCase() ||
-    (currentSubUrl.toLowerCase() === '/agro/' && t.subUrl.toLowerCase() === '/brt/') ||
-    (currentSubUrl.toLowerCase() === '/brt/' && t.subUrl.toLowerCase() === '/agro/')
+    (knownAliases.includes(currentSubUrl.toLowerCase()) && knownAliases.includes(t.subUrl.toLowerCase()))
   );
   if (match) {
     return {
