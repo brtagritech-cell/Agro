@@ -621,6 +621,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
           
           {/* Bottom Sheet Container */}
           <div className="w-full max-w-lg md:max-w-xl bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 animate-slide-up z-10 max-h-[92vh] overflow-y-auto">
+            {/* Mobile Sheet Drag Handle */}
+            <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mb-2 sm:hidden" />
             
             {/* Header */}
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
@@ -689,6 +691,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                 </label>
                 <input
                   type="number"
+                  inputMode="numeric"
                   step="1"
                   min="1"
                   required
@@ -706,6 +709,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                 </label>
                 <input
                   type="number"
+                  inputMode="decimal"
                   step="0.01"
                   min="0.01"
                   required
@@ -910,8 +914,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
       {/* Change Master Data Modal */}
       {isMasterDataOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in">
-          <div className="w-full max-w-md md:max-w-lg bg-white rounded-2xl sm:rounded-3xl shadow-premium border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 sm:space-y-5 animate-slide-up max-h-[92vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+          <div className="w-full max-w-md md:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 sm:space-y-5 animate-slide-up max-h-[92vh] overflow-y-auto">
+            {/* Mobile Sheet Drag Handle */}
+            <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mb-2 sm:hidden" />
             
             {/* Header */}
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
@@ -945,6 +951,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                 </label>
                 <input
                   type="number"
+                  inputMode="decimal"
                   step="0.01"
                   min="0"
                   required
@@ -962,6 +969,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                 </label>
                 <input
                   type="number"
+                  inputMode="decimal"
                   step="0.001"
                   min="0.001"
                   required

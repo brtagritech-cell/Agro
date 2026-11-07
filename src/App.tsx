@@ -4,8 +4,9 @@ import { OwnerDashboard } from './components/OwnerDashboard';
 import { MasterDataGrid } from './components/MasterDataGrid';
 import { SubUserDashboard } from './components/SubUserDashboard';
 import { fetchTransactions, addTransaction, updateWeight, setScriptUrl, getCurrentSubUrl, type Transaction } from './services/sheetService';
-import { LogOut, LayoutDashboard, FileSpreadsheet, CheckCircle, AlertTriangle, X } from 'lucide-react';
+import { LogOut, LayoutDashboard, FileSpreadsheet, CheckCircle, AlertTriangle, X, Zap } from 'lucide-react';
 import { AdminDashboard } from './components/AdminDashboard';
+import { SupabaseConnectModal } from './components/SupabaseConnectModal';
 
 function App() {
   const [userRole, setUserRole] = useState<'Owner' | 'Sub-User' | null>(() => {
@@ -18,7 +19,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'ledger'>('dashboard');
   const [isAdminView, setIsAdminView] = useState<boolean>(false);
-
+  const [isDbModalOpen, setIsDbModalOpen] = useState<boolean>(false);
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -261,7 +262,7 @@ function App() {
           </div>
 
           {/* Desktop Navigation Tabs */}
-          <div className="flex bg-slate-100 p-0.5 sm:p-1 rounded-xl border border-slate-200/40">
+          <div className="hidden sm:flex bg-slate-100 p-0.5 sm:p-1 rounded-xl border border-slate-200/40">
             <button
               onClick={() => setActiveTab('dashboard')}
               className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition-all ${
@@ -286,20 +287,32 @@ function App() {
             </button>
           </div>
 
-          {/* Log Out */}
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 text-xs sm:text-sm font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all border border-transparent hover:border-rose-100 shrink-0"
-            title="Log Out"
-          >
-            <LogOut className="h-4 w-4" />
-            <span className="hidden sm:inline">Logout</span>
-          </button>
+          {/* Header Action Buttons */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <button
+              onClick={() => setIsDbModalOpen(true)}
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-emerald-700 bg-slate-100/80 hover:bg-emerald-50 rounded-xl transition-all border border-slate-200/50"
+              title="Cloud Database Connection"
+            >
+              <Zap className="h-3.5 w-3.5 text-amber-500" />
+              <span className="hidden md:inline">Database</span>
+            </button>
+
+            {/* Log Out */}
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 text-xs sm:text-sm font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all border border-transparent hover:border-rose-100 shrink-0"
+              title="Log Out"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Main Workspace */}
-      <main className="flex-grow max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+      {/* Main Workspace with extra bottom padding on mobile for the bottom navigation bar */}
+      <main className="flex-grow max-w-7xl w-full mx-auto px-2.5 sm:px-6 lg:px-8 py-3 sm:py-6 lg:py-8 pb-24 sm:pb-8">
         {activeTab === 'dashboard' ? (
           <OwnerDashboard
             transactions={transactions}
@@ -317,8 +330,62 @@ function App() {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-slate-100 py-3 sm:py-4 px-4 text-center text-[10px] sm:text-xs text-slate-400 break-words">
+      {/* Mobile App Bottom Navigation Bar (iOS / Android Style) */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-lg border-t border-slate-200/80 px-2 py-1 flex justify-around items-center sm:hidden safe-bottom shadow-lg">
+        <button
+          type="button"
+          onClick={() => setActiveTab('dashboard')}
+          className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all app-tap min-w-[64px] ${
+            activeTab === 'dashboard'
+              ? 'text-red-600 font-bold'
+              : 'text-slate-400 hover:text-slate-600 font-medium'
+          }`}
+        >
+          <LayoutDashboard className={`h-5 w-5 ${activeTab === 'dashboard' ? 'text-red-600' : 'text-slate-400'}`} />
+          <span className="text-[10px] mt-0.5 leading-none">Calendar</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('ledger')}
+          className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all app-tap min-w-[64px] ${
+            activeTab === 'ledger'
+              ? 'text-red-600 font-bold'
+              : 'text-slate-400 hover:text-slate-600 font-medium'
+          }`}
+        >
+          <FileSpreadsheet className={`h-5 w-5 ${activeTab === 'ledger' ? 'text-red-600' : 'text-slate-400'}`} />
+          <span className="text-[10px] mt-0.5 leading-none">Ledger</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setIsDbModalOpen(true)}
+          className="flex flex-col items-center justify-center py-1.5 px-3 rounded-xl text-slate-400 hover:text-emerald-600 font-medium transition-all app-tap min-w-[64px]"
+        >
+          <Zap className="h-5 w-5 text-amber-500" />
+          <span className="text-[10px] mt-0.5 leading-none">Database</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex flex-col items-center justify-center py-1.5 px-3 rounded-xl text-slate-400 hover:text-rose-600 font-medium transition-all app-tap min-w-[64px]"
+        >
+          <LogOut className="h-5 w-5" />
+          <span className="text-[10px] mt-0.5 leading-none">Logout</span>
+        </button>
+      </nav>
+
+      {/* Cloud Database Connection Modal */}
+      <SupabaseConnectModal
+        isOpen={isDbModalOpen}
+        onClose={() => setIsDbModalOpen(false)}
+        onConnected={loadData}
+      />
+
+      {/* Footer (Desktop / Tablet) */}
+      <footer className="hidden sm:block bg-white border-t border-slate-100 py-3 sm:py-4 px-4 text-center text-[10px] sm:text-xs text-slate-400 break-words">
         <div className="max-w-7xl mx-auto">
           <p>&copy; {new Date().getFullYear()} AgroSync agricultural logistics. Active route: <code className="bg-slate-50 px-1.5 py-0.5 rounded font-mono font-semibold">{getCurrentSubUrl()}</code></p>
         </div>

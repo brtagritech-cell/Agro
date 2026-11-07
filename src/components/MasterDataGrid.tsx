@@ -45,6 +45,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMark, setSelectedMark] = useState('');
+  const [mobileView, setMobileView] = useState<'cards' | 'table'>('cards');
   
   // Date Range state
   const [startDate, setStartDate] = useState('');
@@ -97,6 +98,32 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
           <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Real-time agricultural entries overview</p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Mobile Card / Table Segmented Toggle */}
+          <div className="flex lg:hidden bg-slate-100 p-0.5 rounded-xl border border-slate-200/50 text-[11px] font-semibold">
+            <button
+              type="button"
+              onClick={() => setMobileView('cards')}
+              className={`px-2.5 py-1 rounded-lg transition-all ${
+                mobileView === 'cards'
+                  ? 'bg-white text-slate-800 shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Cards
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileView('table')}
+              className={`px-2.5 py-1 rounded-lg transition-all ${
+                mobileView === 'table'
+                  ? 'bg-white text-slate-800 shadow-xs font-bold'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              Table
+            </button>
+          </div>
+
           <button
             onClick={onRefresh}
             disabled={isLoading}
@@ -378,8 +405,8 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
         </div>
       ) : (
         <>
-          {/* Mobile Card View (hidden on desktop) */}
-          <div className="block lg:hidden space-y-3 sm:space-y-4">
+          {/* Mobile Card View */}
+          <div className={`${mobileView === 'cards' ? 'block' : 'hidden'} lg:hidden space-y-3 sm:space-y-4`}>
             {filteredTransactions.map((tx) => (
               <div 
                 key={tx.transactionId} 
@@ -454,8 +481,8 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
             ))}
           </div>
 
-          {/* Desktop Table View (hidden on mobile) */}
-          <div className="hidden lg:block bg-white rounded-2xl shadow-soft border border-slate-100 overflow-hidden">
+          {/* Table View (shown always on desktop, and on mobile when Table mode selected) */}
+          <div className={`${mobileView === 'table' ? 'block' : 'hidden'} lg:block bg-white rounded-2xl shadow-soft border border-slate-100 overflow-hidden`}>
             <div className="overflow-x-auto max-h-[calc(100vh-280px)] min-h-[350px]">
               <table className="w-full border-collapse text-left">
                 <thead className="bg-slate-50 text-[11px] xl:text-xs font-semibold text-slate-500 uppercase tracking-wider sticky top-0 z-1 whitespace-nowrap">

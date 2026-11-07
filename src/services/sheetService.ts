@@ -364,13 +364,32 @@ export async function fetchTransactions(): Promise<Transaction[]> {
     }
 
     // 2. Fetch Transactions from Supabase
-    const { data, error } = await supabase
-      .from('transactions')
-      .select('*')
-      .eq('sub_url', currentTenant.subUrl);
+    // Use flexible query so aliases (/Spicelink/, /Agro/, /BRT/, /) or casing differences don't hide transactions
+    const knownAliases = ['/spicelink/', '/agro/', '/brt/', '/'];
+    const isPrimary = knownAliases.includes(currentTenant.subUrl.toLowerCase());
+    
+    let query = supabase.from('transactions').select('*');
+    if (isPrimary) {
+      query = query.or('sub_url.ilike.%spicelink%,sub_url.ilike.%agro%,sub_url.ilike.%brt%,sub_url.eq./,sub_url.is.null');
+    } else {
+      query = query.ilike('sub_url', currentTenant.subUrl.trim());
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw new Error(error.message);
+    }
+
+    if (!data || data.length === 0) {
+      // Supabase is empty! Auto-upload local transactions so data is not wiped out
+      const localTxs = getMockTransactions();
+      if (localTxs.length > 0) {
+        console.log('Supabase has 0 transactions. Auto-syncing local transactions to Supabase...');
+        syncAllToSupabase().catch(console.error);
+        return localTxs;
+      }
+      return [];
     }
 
     const formatted: Transaction[] = (data || []).map((item: any) => {
@@ -387,7 +406,7 @@ export async function fetchTransactions(): Promise<Transaction[]> {
         subUserRate: subUserRate,
         totalValue: parseFloat(String(item.total_value || '0')) || (bags * (subUserRate || rate)),
         agent: item.agent || '',
-        mark: item.mark || 'BRT',
+        mark: item.mark || 'Spicelink',
         weight: item.weight || '',
         rateReason: item.rate_reason || '',
         lockedBy: item.locked_by || '',
@@ -406,6 +425,66 @@ export async function fetchTransactions(): Promise<Transaction[]> {
   } catch (error) {
     console.error('Failed fetching from Supabase, falling back to local DB cache:', error);
     return getMockTransactions();
+  }
+}
+
+export async function syncAllToSupabase(): Promise<{ success: boolean; message: string; count?: number }> {
+  if (!isSupabaseEnabled()) {
+    return { success: false, message: 'Supabase credentials not configured. Please paste your Supabase URL & Key.' };
+  }
+
+  try {
+    const tenants = getTenants();
+    await syncBranchesToSheet(tenants);
+
+    const localTxs = getMockTransactions();
+    if (localTxs.length === 0) {
+      return { success: true, message: 'Connected to Supabase. No local transactions to sync.', count: 0 };
+    }
+
+    const currentTenant = getCurrentTenant();
+    const rows = localTxs.map(tx => ({
+      transaction_id: tx.transactionId,
+      timestamp: tx.timestamp || new Date().toISOString(),
+      date: tx.date,
+      lot: String(tx.lot || '0'),
+      bags: Number(tx.bags) || 0,
+      rate: Number(tx.rate) || 0,
+      sub_user_rate: tx.subUserRate !== undefined && tx.subUserRate !== null && !isNaN(Number(tx.subUserRate)) ? Number(tx.subUserRate) : null,
+      total_value: Number(tx.totalValue) || (Number(tx.bags) * (Number(tx.subUserRate) || Number(tx.rate))),
+      agent: tx.agent || '',
+      mark: tx.mark || 'Spicelink',
+      weight: tx.weight || '',
+      rate_reason: tx.rateReason || '',
+      locked_by: tx.lockedBy || '',
+      sub_url: tx.subUrl || currentTenant.subUrl,
+      sub_user_name: tx.subUserName || null,
+      sub_user_timestamp: tx.subUserTimestamp || null,
+      gross_weight: tx.grossWeight !== undefined && tx.grossWeight !== null ? Number(tx.grossWeight) : null,
+      bags_weight: tx.bagsWeight !== undefined && tx.bagsWeight !== null ? Number(tx.bagsWeight) : null,
+      net_weight: tx.netWeight !== undefined && tx.netWeight !== null ? Number(tx.netWeight) : null,
+      calculated_amount: tx.calculatedAmount !== undefined && tx.calculatedAmount !== null ? Number(tx.calculatedAmount) : null
+    }));
+
+    const { error } = await supabase
+      .from('transactions')
+      .upsert(rows, { onConflict: 'transaction_id' });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return { 
+      success: true, 
+      message: `Successfully synced ${rows.length} transactions to Supabase!`, 
+      count: rows.length 
+    };
+  } catch (error: any) {
+    console.error('Failed to sync all data to Supabase:', error);
+    return { 
+      success: false, 
+      message: error?.message || 'Failed to sync data to Supabase. Check SQL tables and RLS policies.' 
+    };
   }
 }
 
@@ -435,11 +514,11 @@ export async function addTransaction(
       transaction_id: newTx.transactionId,
       timestamp: newTx.timestamp || new Date().toISOString(),
       date: newTx.date,
-      lot: newTx.lot,
-      bags: newTx.bags,
-      rate: newTx.rate,
-      sub_user_rate: newTx.subUserRate || null,
-      total_value: newTx.totalValue,
+      lot: String(newTx.lot || '0'),
+      bags: Number(newTx.bags) || 0,
+      rate: Number(newTx.rate) || 0,
+      sub_user_rate: newTx.subUserRate !== undefined && newTx.subUserRate !== null && !isNaN(Number(newTx.subUserRate)) ? Number(newTx.subUserRate) : null,
+      total_value: Number(newTx.totalValue) || (Number(newTx.bags) * (Number(newTx.subUserRate) || Number(newTx.rate))),
       agent: newTx.agent,
       mark: newTx.mark,
       weight: newTx.weight || '',
@@ -448,32 +527,42 @@ export async function addTransaction(
       sub_url: newTx.subUrl,
       sub_user_name: newTx.subUserName || null,
       sub_user_timestamp: newTx.subUserTimestamp || null,
-      gross_weight: newTx.grossWeight || null,
-      bags_weight: newTx.bagsWeight || null,
-      net_weight: newTx.netWeight || null,
-      calculated_amount: newTx.calculatedAmount || null
+      gross_weight: newTx.grossWeight !== undefined && newTx.grossWeight !== null ? Number(newTx.grossWeight) : null,
+      bags_weight: newTx.bagsWeight !== undefined && newTx.bagsWeight !== null ? Number(newTx.bagsWeight) : null,
+      net_weight: newTx.netWeight !== undefined && newTx.netWeight !== null ? Number(newTx.netWeight) : null,
+      calculated_amount: newTx.calculatedAmount !== undefined && newTx.calculatedAmount !== null ? Number(newTx.calculatedAmount) : null
     };
 
     const { error } = await supabase
       .from('transactions')
-      .insert(supabaseRow);
+      .upsert(supabaseRow, { onConflict: 'transaction_id' });
 
     if (error) {
       throw new Error(error.message);
     }
 
     const txs = getMockTransactions();
-    txs.push(newTx);
+    const existingIndex = txs.findIndex(t => t.transactionId === newTx.transactionId);
+    if (existingIndex >= 0) {
+      txs[existingIndex] = newTx;
+    } else {
+      txs.push(newTx);
+    }
     saveMockTransactions(txs);
-    return { success: true, message: 'Saved to Supabase Ledger', data: newTx };
-  } catch (error) {
-    console.error('Failed to sync with Supabase. Saving to local storage:', error);
+    return { success: true, message: 'Saved and synced to Supabase Ledger', data: newTx };
+  } catch (error: any) {
+    console.error('Failed to sync with Supabase:', error);
     const txs = getMockTransactions();
-    txs.push(newTx);
+    const existingIndex = txs.findIndex(t => t.transactionId === newTx.transactionId);
+    if (existingIndex >= 0) {
+      txs[existingIndex] = newTx;
+    } else {
+      txs.push(newTx);
+    }
     saveMockTransactions(txs);
     return { 
-      success: true, 
-      message: 'Saved to local database (Supabase Sync failed).', 
+      success: false, 
+      message: `Supabase Error: ${error?.message || 'Sync failed'}. (Saved in browser cache).`, 
       data: newTx 
     };
   }

@@ -10,7 +10,8 @@ import {
   CheckCircle2, 
   AlertCircle, 
   Loader2, 
-  RotateCcw
+  RotateCcw,
+  RefreshCw
 } from 'lucide-react';
 import { 
   getSupabaseCredentials, 
@@ -18,6 +19,7 @@ import {
   clearSupabaseCredentials, 
   testSupabaseConnection 
 } from '../services/supabaseClient';
+import { syncAllToSupabase } from '../services/sheetService';
 
 interface SupabaseConnectModalProps {
   isOpen: boolean;
@@ -65,17 +67,20 @@ CREATE TABLE IF NOT EXISTS public.transactions (
 ALTER TABLE public.tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 
--- 4. Create policies to allow public read & write through the Anon Key
+-- 4. Create policies to allow public read & write through the Anon Key (re-runnable)
+DROP POLICY IF EXISTS "Allow public read/write on tenants" ON public.tenants;
 CREATE POLICY "Allow public read/write on tenants" 
   ON public.tenants FOR ALL USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow public read/write on transactions" ON public.transactions;
 CREATE POLICY "Allow public read/write on transactions" 
   ON public.transactions FOR ALL USING (true) WITH CHECK (true);
 
--- 5. Seed default tenant
+-- 5. Seed default tenants for AgroSync (/Spicelink/, /Agro/, /BRT/)
 INSERT INTO public.tenants (
   sub_url, owner_id, owner_password, sub_users, sub_user_passwords, marks, agents, full_link
-) VALUES (
+) VALUES 
+(
   '/Spicelink/',
   'Spicelink',
   '1234',
@@ -84,7 +89,31 @@ INSERT INTO public.tenants (
   '["Spicelink", "Agro", "BRT", "RS", "TS", "DV", "BVB"]'::jsonb,
   '["Ramesh Kumar", "Suresh & Sons", "Patel Agro", "BVB Agencies"]'::jsonb,
   ''
-) ON CONFLICT (sub_url) DO NOTHING;
+),
+(
+  '/Agro/',
+  'Agro',
+  '1234',
+  '["Ramesh", "Suresh", "Patel", "BVB"]'::jsonb,
+  '{"Ramesh": "1234", "Suresh": "1234", "Patel": "1234", "BVB": "1234"}'::jsonb,
+  '["Spicelink", "Agro", "BRT", "RS", "TS", "DV", "BVB"]'::jsonb,
+  '["Ramesh Kumar", "Suresh & Sons", "Patel Agro", "BVB Agencies"]'::jsonb,
+  ''
+),
+(
+  '/BRT/',
+  'BRT',
+  '1234',
+  '["Ramesh", "Suresh", "Patel", "BVB"]'::jsonb,
+  '{"Ramesh": "1234", "Suresh": "1234", "Patel": "1234", "BVB": "1234"}'::jsonb,
+  '["Spicelink", "Agro", "BRT", "RS", "TS", "DV", "BVB"]'::jsonb,
+  '["Ramesh Kumar", "Suresh & Sons", "Patel Agro", "BVB Agencies"]'::jsonb,
+  ''
+)
+ON CONFLICT (sub_url) DO UPDATE SET
+  owner_id = EXCLUDED.owner_id,
+  owner_password = EXCLUDED.owner_password;
+
 `;
 
 export const SupabaseConnectModal: React.FC<SupabaseConnectModalProps> = ({ isOpen, onClose, onConnected }) => {
@@ -93,6 +122,7 @@ export const SupabaseConnectModal: React.FC<SupabaseConnectModalProps> = ({ isOp
   const [anonKey, setAnonKey] = useState(currentCreds.anonKey);
   const [showKey, setShowKey] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [copiedSQL, setCopiedSQL] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -125,6 +155,25 @@ export const SupabaseConnectModal: React.FC<SupabaseConnectModalProps> = ({ isOp
     const res = await testSupabaseConnection(url, anonKey);
     setIsTesting(false);
     setTestResult(res);
+  };
+
+  const handleSyncNow = async () => {
+    setTestResult(null);
+    setSavedSuccess(false);
+    setIsSyncing(true);
+
+    // Save credentials first to make sure client is using current inputs
+    saveSupabaseCredentials(url, anonKey);
+    const res = await syncAllToSupabase();
+    setIsSyncing(false);
+    setTestResult({
+      success: res.success,
+      message: res.message
+    });
+
+    if (res.success) {
+      onConnected?.();
+    }
   };
 
   const handleSave = () => {
@@ -304,12 +353,12 @@ export const SupabaseConnectModal: React.FC<SupabaseConnectModalProps> = ({ isOp
 
         {/* Footer Actions */}
         <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3">
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <button
               type="button"
               onClick={handleTestConnection}
-              disabled={isTesting || !url || !anonKey}
-              className="w-full sm:w-auto px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold rounded-xl border border-emerald-200/80 transition-all text-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
+              disabled={isTesting || isSyncing || !url || !anonKey}
+              className="px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold rounded-xl border border-emerald-200/80 transition-all text-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
             >
               {isTesting ? (
                 <>
@@ -320,6 +369,25 @@ export const SupabaseConnectModal: React.FC<SupabaseConnectModalProps> = ({ isOp
                 <>
                   <Zap className="h-3.5 w-3.5 text-emerald-600" />
                   <span>Test Connection</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={handleSyncNow}
+              disabled={isSyncing || isTesting || !url || !anonKey}
+              className="px-3.5 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-800 font-bold rounded-xl border border-blue-200/80 transition-all text-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
+              title="Upload existing local transactions directly to Supabase"
+            >
+              {isSyncing ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
+                  <span>Syncing...</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-3.5 w-3.5 text-blue-600" />
+                  <span>Sync Now</span>
                 </>
               )}
             </button>
