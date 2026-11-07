@@ -15,7 +15,9 @@ import {
   AlertTriangle,
   ArrowRight,
   Check,
-  Eye
+  Eye,
+  User,
+  Users
 } from 'lucide-react';
 import { type Transaction, isGoogleSheetsEnabled, getCurrentTenant } from '../services/sheetService';
 import { ViewWeightDetailsModal } from './ViewWeightDetailsModal';
@@ -408,7 +410,8 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
 
   // Viewing details modal state
   const [viewingTx, setViewingTx] = useState<Transaction | null>(null);
-  const [activeQueueFilter, setActiveQueueFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [activeQueueFilter, setActiveQueueFilter] = useState<'all' | 'pending' | 'completed'>('pending');
+  const [selectedSubUserFilter, setSelectedSubUserFilter] = useState<string>('all');
 
   // Sum of bags logged by this subuser today
   const totalBagsLoggedToday = todayTransactions
@@ -417,10 +420,37 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
 
   const completedTodayCount = todayTransactions.filter(tx => tx.weight && tx.weight.trim() !== '').length;
 
+  // Compute unique sub-users from tenant configuration and transaction logs
+  const branchSubUsers = currentTenant?.subUsers || [];
+  const loggedSubUsersFromTxs = todayTransactions
+    .map(tx => tx.subUserName)
+    .filter((u): u is string => Boolean(u && u.trim() !== ''));
+
+  const allKnownSubUsers = Array.from(
+    new Set([...branchSubUsers, ...loggedSubUsersFromTxs])
+  );
+
+  const pendingLotsCount = todayTransactions.filter(tx => !tx.weight || tx.weight.trim() === '').length;
+  const unassignedLoggedCount = todayTransactions.filter(
+    tx => tx.weight && tx.weight.trim() !== '' && (!tx.subUserName || tx.subUserName.trim() === '')
+  ).length;
+
   const displayTransactions = sortedTodayTransactions.filter(tx => {
     const hasWeight = !!(tx.weight && tx.weight.trim() !== '');
     if (activeQueueFilter === 'pending') return !hasWeight;
     if (activeQueueFilter === 'completed') return hasWeight;
+    
+    // In 'all' mode: secondary subuser filter applies
+    if (activeQueueFilter === 'all' && selectedSubUserFilter !== 'all') {
+      if (selectedSubUserFilter === '__pending__') {
+        return !hasWeight;
+      }
+      if (selectedSubUserFilter === '__unassigned__') {
+        return hasWeight && (!tx.subUserName || tx.subUserName.trim() === '');
+      }
+      return hasWeight && tx.subUserName?.toLowerCase() === selectedSubUserFilter.toLowerCase();
+    }
+    
     return true;
   });
 
@@ -429,35 +459,44 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
       
       {/* Sub-User Terminal Header */}
       <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-100 shadow-soft flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5 sm:gap-3">
-          <div className="h-9 w-9 sm:h-10 sm:w-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 shadow-sm border border-emerald-100 shrink-0">
-            <FileSpreadsheet className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
+        <div className="flex items-center gap-2.5 sm:gap-3.5">
+          <div className="h-11 w-11 sm:h-14 sm:w-14 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 shadow-sm border border-emerald-100 shrink-0">
+            <FileSpreadsheet className="h-5 w-5 sm:h-7 sm:w-7" />
           </div>
           <div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <h2 className="text-sm sm:text-base font-bold text-slate-800">Sub-User Terminal</h2>
-              {subUserName && (
-                <span className="text-[9px] sm:text-[10px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded-lg border border-slate-200/60 font-mono">
-                  {subUserName}
-                </span>
-              )}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 block">
+                Sub-User Terminal
+              </span>
+              <span className="text-slate-300 hidden sm:inline">•</span>
+              <span className="text-[10px] sm:text-xs text-slate-500 font-semibold uppercase tracking-wider hidden sm:inline">
+                Weight Optimization Window
+              </span>
             </div>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-[9px] sm:text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Weight Optimization Window</span>
-              <span className={`inline-flex items-center gap-1 text-[8px] font-bold px-1.5 py-0.2 rounded-full border uppercase tracking-wider font-mono ${
+            
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-0.5 sm:mt-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Operator:</span>
+                <span className="text-lg sm:text-2xl font-black text-emerald-800 bg-emerald-50/90 px-3 py-0.5 rounded-xl border border-emerald-200/80 shadow-2xs font-mono flex items-center gap-1.5">
+                  <User className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
+                  {subUserName || 'Sub-User'}
+                </span>
+              </div>
+
+              <span className={`inline-flex items-center gap-1.5 text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider font-mono ${
                 isGoogleSheetsEnabled() 
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                   : 'bg-amber-50 text-amber-700 border-amber-200'
               }`}>
                 {isGoogleSheetsEnabled() ? (
                   <>
-                    <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
-                    <span>Connected</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>CONNECTED</span>
                   </>
                 ) : (
                   <>
-                    <span className="w-1 h-1 rounded-full bg-amber-500" />
-                    <span>Mock Mode</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    <span>MOCK MODE</span>
                   </>
                 )}
               </span>
@@ -557,28 +596,25 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
           <div className="flex items-center gap-2">
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Tasks Queue</h3>
-            {activeQueueFilter !== 'all' && (
+            {activeQueueFilter !== 'all' ? (
               <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                 Filtered: {activeQueueFilter === 'pending' ? 'Pending Lots' : 'Completed Logged Bags'}
               </span>
-            )}
+            ) : selectedSubUserFilter !== 'all' ? (
+              <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
+                Filtered by Sub-User: {selectedSubUserFilter === '__pending__' ? 'Pending Lots' : selectedSubUserFilter === '__unassigned__' ? 'Unassigned' : selectedSubUserFilter}
+              </span>
+            ) : null}
           </div>
-          <div className="flex items-center gap-1 text-[11px]">
+          <div className="flex items-center gap-1 sm:gap-1.5 text-[11px]">
+            {/* 1. Pending (FIRST) */}
             <button
               type="button"
-              onClick={() => setActiveQueueFilter('all')}
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
-                activeQueueFilter === 'all'
-                  ? 'bg-slate-800 text-white shadow-xs'
-                  : 'text-slate-500 hover:bg-slate-100'
-              }`}
-            >
-              All ({sortedTodayTransactions.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveQueueFilter('pending')}
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+              onClick={() => {
+                setActiveQueueFilter('pending');
+                setSelectedSubUserFilter('all');
+              }}
+              className={`px-2.5 py-1 sm:px-3 sm:py-1 rounded-lg font-bold transition-all cursor-pointer ${
                 activeQueueFilter === 'pending'
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-slate-500 hover:bg-slate-100'
@@ -586,10 +622,15 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
             >
               Pending ({pendingTodayCount})
             </button>
+
+            {/* 2. Logged (SECOND) */}
             <button
               type="button"
-              onClick={() => setActiveQueueFilter('completed')}
-              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+              onClick={() => {
+                setActiveQueueFilter('completed');
+                setSelectedSubUserFilter('all');
+              }}
+              className={`px-2.5 py-1 sm:px-3 sm:py-1 rounded-lg font-bold transition-all cursor-pointer ${
                 activeQueueFilter === 'completed'
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-slate-500 hover:bg-slate-100'
@@ -597,8 +638,133 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
             >
               Logged ({completedTodayCount})
             </button>
+
+            {/* 3. All (LAST) */}
+            <button
+              type="button"
+              onClick={() => setActiveQueueFilter('all')}
+              className={`px-2.5 py-1 sm:px-3 sm:py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                activeQueueFilter === 'all'
+                  ? 'bg-slate-800 text-white shadow-xs'
+                  : 'text-slate-500 hover:bg-slate-100'
+              }`}
+            >
+              All ({sortedTodayTransactions.length})
+            </button>
           </div>
         </div>
+
+        {/* Secondary Sub-User Breakdown Filter (shown when All is selected) */}
+        {activeQueueFilter === 'all' && (
+          <div className="bg-slate-50/90 p-2.5 sm:p-3 rounded-2xl border border-slate-200/70 space-y-2 animate-fade-in">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-slate-500 font-bold text-[10px] sm:text-[11px] uppercase tracking-wider pl-0.5">
+                <Users className="h-3.5 w-3.5 text-slate-400" />
+                <span>Filter By Sub-User (Lots Logged):</span>
+              </div>
+              {selectedSubUserFilter !== 'all' && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedSubUserFilter('all')}
+                  className="text-[10px] font-bold text-slate-500 hover:text-slate-800 underline cursor-pointer"
+                >
+                  Reset to All Lots
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedSubUserFilter('all')}
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  selectedSubUserFilter === 'all'
+                    ? 'bg-slate-800 text-white shadow-xs'
+                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80 shadow-2xs'
+                }`}
+              >
+                <span>All Sub-Users</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                  selectedSubUserFilter === 'all' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {sortedTodayTransactions.length} lots
+                </span>
+              </button>
+
+              {allKnownSubUsers.map((user) => {
+                const count = todayTransactions.filter(
+                  tx => tx.subUserName?.toLowerCase() === user.toLowerCase() && tx.weight && tx.weight.trim() !== ''
+                ).length;
+                const isSelected = selectedSubUserFilter.toLowerCase() === user.toLowerCase();
+                return (
+                  <button
+                    key={user}
+                    type="button"
+                    onClick={() => setSelectedSubUserFilter(isSelected ? 'all' : user)}
+                    className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      isSelected
+                        ? 'bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-300'
+                        : 'bg-white text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 border border-slate-200/80 shadow-2xs'
+                    }`}
+                  >
+                    <User className={`h-3 w-3 ${isSelected ? 'text-white' : 'text-slate-400'}`} />
+                    <span>{user}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                      isSelected
+                        ? 'bg-white/25 text-white'
+                        : count > 0
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-slate-100 text-slate-400'
+                    }`}>
+                      {count} {count === 1 ? 'lot' : 'lots'}
+                    </span>
+                  </button>
+                );
+              })}
+
+              {pendingLotsCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedSubUserFilter(selectedSubUserFilter === '__pending__' ? 'all' : '__pending__')}
+                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    selectedSubUserFilter === '__pending__'
+                      ? 'bg-amber-600 text-white shadow-xs ring-2 ring-amber-300'
+                      : 'bg-white text-slate-700 hover:bg-amber-50 hover:text-amber-800 border border-slate-200/80 shadow-2xs'
+                  }`}
+                >
+                  <Weight className={`h-3 w-3 ${selectedSubUserFilter === '__pending__' ? 'text-white' : 'text-amber-500'}`} />
+                  <span>Pending (Unlogged)</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    selectedSubUserFilter === '__pending__'
+                      ? 'bg-white/25 text-white'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {pendingLotsCount} {pendingLotsCount === 1 ? 'lot' : 'lots'}
+                  </span>
+                </button>
+              )}
+
+              {unassignedLoggedCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedSubUserFilter(selectedSubUserFilter === '__unassigned__' ? 'all' : '__unassigned__')}
+                  className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    selectedSubUserFilter === '__unassigned__'
+                      ? 'bg-slate-700 text-white shadow-xs'
+                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80 shadow-2xs'
+                  }`}
+                >
+                  <span>Other / Unassigned</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    selectedSubUserFilter === '__unassigned__' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {unassignedLoggedCount} lots
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {isLoading && sortedTodayTransactions.length === 0 ? (
           <div className="bg-white rounded-2xl p-10 text-center border border-slate-100 shadow-soft">
@@ -613,17 +779,24 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
                 ? 'No Logged Bags Recorded Yet' 
                 : activeQueueFilter === 'pending' 
                   ? 'No Pending Operations Today' 
-                  : 'No Lots For Today'}
+                  : selectedSubUserFilter !== 'all'
+                    ? `No lots logged by ${selectedSubUserFilter === '__pending__' ? 'pending lots' : selectedSubUserFilter} today`
+                    : 'No Lots For Today'}
             </p>
             <p className="text-xs text-slate-400 mt-1">
               {activeQueueFilter === 'completed'
                 ? 'No transactions with completed weight metrics found for today.'
-                : 'All transactions for today have been completed or none exist.'}
+                : activeQueueFilter === 'pending'
+                  ? 'All transactions for today have been completed or none exist.'
+                  : 'Check other sub-users or refresh the queue.'}
             </p>
-            {activeQueueFilter !== 'all' && (
+            {(activeQueueFilter !== 'all' || selectedSubUserFilter !== 'all') && (
               <button
                 type="button"
-                onClick={() => setActiveQueueFilter('all')}
+                onClick={() => {
+                  setActiveQueueFilter('all');
+                  setSelectedSubUserFilter('all');
+                }}
                 className="mt-3 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
               >
                 Show All Lots ({sortedTodayTransactions.length})
@@ -660,6 +833,12 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
                       {hasWeight && (
                         <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded border border-emerald-200 flex items-center gap-1">
                           <Check className="h-3 w-3" /> Done
+                        </span>
+                      )}
+                      {hasWeight && tx.subUserName && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 bg-slate-100 text-slate-700 rounded border border-slate-200/80 flex items-center gap-1 font-mono">
+                          <User className="h-2.5 w-2.5 text-slate-400" />
+                          <span>Logged by: {tx.subUserName}</span>
                         </span>
                       )}
                       {isLockedByOther && (
