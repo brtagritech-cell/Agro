@@ -1354,6 +1354,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
           transaction={viewingTx}
           onClose={() => setViewingTx(null)}
           onUpdate={onRefresh}
+          allowPrint={true}
         />
       )}
 

@@ -1239,12 +1239,13 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
         </div>
       )}
 
-      {/* View Weight Details Modal */}
+      {/* View Weight Details Modal (Print option disabled for Sub-User Terminal) */}
       {viewingTx && (
         <ViewWeightDetailsModal
           transaction={viewingTx}
           onClose={() => setViewingTx(null)}
           onUpdate={onRefresh}
+          allowPrint={false}
         />
       )}
 

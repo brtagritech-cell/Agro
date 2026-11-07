@@ -723,6 +723,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
           transaction={viewingTx}
           onClose={() => setViewingTx(null)}
           onUpdate={onRefresh}
+          allowPrint={true}
           dateRange={
             startDate && endDate
               ? `${startDate} to ${endDate}`

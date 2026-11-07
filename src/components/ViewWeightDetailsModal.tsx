@@ -8,12 +8,14 @@ interface ViewWeightDetailsModalProps {
   onClose: () => void;
   onUpdate?: () => void;
   dateRange?: string;
+  allowPrint?: boolean;
 }
 
 export const ViewWeightDetailsModal: React.FC<ViewWeightDetailsModalProps> = ({
   transaction,
   onClose,
-  dateRange
+  dateRange,
+  allowPrint = false
 }) => {
   const currentTenant = getCurrentTenant();
   const bagCost = currentTenant?.bagCost ?? 25;
@@ -55,99 +57,103 @@ export const ViewWeightDetailsModal: React.FC<ViewWeightDetailsModalProps> = ({
 
   return (
     <>
-      {/* Print Specific CSS to isolate the slip cleanly */}
-      <style>{`
-        @media print {
-          body * {
-            visibility: hidden !important;
-          }
-          #printable-weight-slip, #printable-weight-slip * {
-            visibility: visible !important;
-          }
-          #printable-weight-slip {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            display: block !important;
-            padding: 24px !important;
-            background: white !important;
-            color: black !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-      `}</style>
+      {/* Print Specific CSS to isolate the slip cleanly (Only enabled when allowPrint is true) */}
+      {allowPrint && (
+        <>
+          <style>{`
+            @media print {
+              body * {
+                visibility: hidden !important;
+              }
+              #printable-weight-slip, #printable-weight-slip * {
+                visibility: visible !important;
+              }
+              #printable-weight-slip {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                display: block !important;
+                padding: 24px !important;
+                background: white !important;
+                color: black !important;
+              }
+              .no-print {
+                display: none !important;
+              }
+            }
+          `}</style>
 
-      {/* Printable Slip (DOM for printer) */}
-      <div id="printable-weight-slip" className="hidden">
-        <div style={{ borderBottom: '2px solid black', paddingBottom: '12px', marginBottom: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <h1 style={{ fontSize: '20px', fontWeight: '900', margin: 0, textTransform: 'uppercase' }}>AgroSync Logistics</h1>
-              <p style={{ fontSize: '12px', margin: '4px 0 0', color: '#555' }}>Branch: {currentTenant?.subUrl || 'Head Branch'}</p>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <h2 style={{ fontSize: '15px', fontWeight: 'bold', margin: 0 }}>WEIGHT LEDGER SLIP</h2>
-              <p style={{ fontSize: '12px', margin: '4px 0 0', fontFamily: 'monospace' }}>Date: {transaction.date}</p>
-              {dateRange && <p style={{ fontSize: '10px', margin: '2px 0 0', color: '#666' }}>Date Range: {dateRange}</p>}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px', padding: '12px', border: '1px solid #ccc', borderRadius: '8px', marginBottom: '16px' }}>
-          <div><strong>LOT NUMBER:</strong> Lot {transaction.lot}</div>
-          <div><strong>TRANSACTION ID:</strong> {transaction.transactionId}</div>
-          <div><strong>DATE:</strong> {transaction.date}</div>
-          <div><strong>AGENT NAME:</strong> {transaction.agent}</div>
-          <div><strong>BRAND / MARK:</strong> {transaction.mark}</div>
-          <div><strong>TOTAL BAGS:</strong> {totalBags} Bags</div>
-          <div><strong>OWNER RATE:</strong> {formatINR(transaction.rate)}</div>
-          <div><strong>SUB-USER RATE:</strong> {transaction.subUserRate ? formatINR(transaction.subUserRate) : 'Pending'}</div>
-          <div><strong>LOGGED BY (SUB-USER):</strong> {transaction.subUserName || 'Pending'}</div>
-          {transaction.rateReason && (
-            <div style={{ gridColumn: 'span 2', color: '#b91c1c' }}><strong>RATE MODIFICATION REASON:</strong> {transaction.rateReason}</div>
-          )}
-        </div>
-
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', borderBottom: '1px solid #ccc', paddingBottom: '4px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}>
-            <span>Bag Weights Breakdown ({bagWeights.length} Bags)</span>
-            <span style={{ fontFamily: 'monospace' }}>Total Gross: {grossWeight.toFixed(3)} kg</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', fontSize: '11px' }}>
-            {bagWeights.map((w, idx) => (
-              <div key={`print-bag-${idx}`} style={{ padding: '4px 8px', border: '1px solid #ddd', borderRadius: '4px', display: 'flex', justifyContent: 'space-between', fontFamily: 'monospace' }}>
-                <span style={{ color: '#666' }}>#{idx + 1}:</span>
-                <span style={{ fontWeight: 'bold' }}>{w} kg</span>
+          {/* Printable Slip (DOM for printer) */}
+          <div id="printable-weight-slip" className="hidden">
+            <div style={{ borderBottom: '2px solid black', paddingBottom: '12px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <h1 style={{ fontSize: '22px', fontWeight: '900', margin: 0, letterSpacing: '-0.5px' }}>AgroSync</h1>
+                  <p style={{ fontSize: '12px', margin: '4px 0 0', color: '#555' }}>Branch: {currentTenant?.subUrl || 'Head Branch'}</p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <h2 style={{ fontSize: '15px', fontWeight: 'bold', margin: 0 }}>WEIGHT LEDGER SLIP</h2>
+                  <p style={{ fontSize: '12px', margin: '4px 0 0', fontFamily: 'monospace' }}>Date: {transaction.date}</p>
+                  {dateRange && <p style={{ fontSize: '10px', margin: '2px 0 0', color: '#666' }}>Date Range: {dateRange}</p>}
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
 
-        <div style={{ border: '2px solid black', padding: '12px', borderRadius: '8px', fontSize: '12px', marginBottom: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderBottom: '1px solid #ccc', paddingBottom: '6px', marginBottom: '6px' }}>
-            <span>CALCULATIONS SUMMARY</span>
-            <span style={{ fontFamily: 'monospace' }}>TARE: {taram.toFixed(3)} KG/BAG</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-            <div>Total Bags Count: <strong>{totalBags} Bags</strong></div>
-            <div>Gross Weight: <strong style={{ fontFamily: 'monospace' }}>{grossWeight.toFixed(3)} kg</strong></div>
-            <div>Bags Tare Deduction: <strong style={{ fontFamily: 'monospace' }}>-{tareWeight.toFixed(3)} kg</strong></div>
-            <div>Net Weight: <strong style={{ fontFamily: 'monospace' }}>{netWeight.toFixed(3)} kg</strong></div>
-          </div>
-          <div style={{ borderTop: '1px solid black', paddingTop: '8px', marginTop: '6px', display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: '900' }}>
-            <span>CALCULATED NET AMOUNT:</span>
-            <span style={{ color: '#047857' }}>{formatINR(grossAmount)}</span>
-          </div>
-        </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px', padding: '12px', border: '1px solid #ccc', borderRadius: '8px', marginBottom: '16px' }}>
+              <div><strong>LOT NUMBER:</strong> Lot {transaction.lot}</div>
+              <div><strong>TRANSACTION ID:</strong> {transaction.transactionId}</div>
+              <div><strong>DATE:</strong> {transaction.date}</div>
+              <div><strong>AGENT NAME:</strong> {transaction.agent}</div>
+              <div><strong>BRAND / MARK:</strong> {transaction.mark}</div>
+              <div><strong>TOTAL BAGS:</strong> {totalBags} Bags</div>
+              <div><strong>OWNER RATE:</strong> {formatINR(transaction.rate)}</div>
+              <div><strong>SUB-USER RATE:</strong> {transaction.subUserRate ? formatINR(transaction.subUserRate) : 'Pending'}</div>
+              <div><strong>LOGGED BY (SUB-USER):</strong> {transaction.subUserName || 'Pending'}</div>
+              {transaction.rateReason && (
+                <div style={{ gridColumn: 'span 2', color: '#b91c1c' }}><strong>RATE MODIFICATION REASON:</strong> {transaction.rateReason}</div>
+              )}
+            </div>
 
-        <div style={{ borderTop: '1px solid #ccc', paddingTop: '8px', fontSize: '10px', color: '#666', display: 'flex', justifyContent: 'space-between' }}>
-          <span>AgroSync Logistics Verified Ledger Record</span>
-          <span>Printed on: {new Date().toLocaleString()}</span>
-        </div>
-      </div>
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', borderBottom: '1px solid #ccc', paddingBottom: '4px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}>
+                <span>Bag Weights Breakdown ({bagWeights.length} Bags)</span>
+                <span style={{ fontFamily: 'monospace' }}>Total Gross: {grossWeight.toFixed(3)} kg</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', fontSize: '11px' }}>
+                {bagWeights.map((w, idx) => (
+                  <div key={`print-bag-${idx}`} style={{ padding: '4px 8px', border: '1px solid #ddd', borderRadius: '4px', display: 'flex', justifyContent: 'space-between', fontFamily: 'monospace' }}>
+                    <span style={{ color: '#666' }}>#{idx + 1}:</span>
+                    <span style={{ fontWeight: 'bold' }}>{w} kg</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ border: '2px solid black', padding: '12px', borderRadius: '8px', fontSize: '12px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderBottom: '1px solid #ccc', paddingBottom: '6px', marginBottom: '6px' }}>
+                <span>CALCULATIONS SUMMARY</span>
+                <span style={{ fontFamily: 'monospace' }}>TARE: {taram.toFixed(3)} KG/BAG</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                <div>Total Bags Count: <strong>{totalBags} Bags</strong></div>
+                <div>Gross Weight: <strong style={{ fontFamily: 'monospace' }}>{grossWeight.toFixed(3)} kg</strong></div>
+                <div>Bags Tare Deduction: <strong style={{ fontFamily: 'monospace' }}>-{tareWeight.toFixed(3)} kg</strong></div>
+                <div>Net Weight: <strong style={{ fontFamily: 'monospace' }}>{netWeight.toFixed(3)} kg</strong></div>
+              </div>
+              <div style={{ borderTop: '1px solid black', paddingTop: '8px', marginTop: '6px', display: 'flex', justifyContent: 'space-between', fontSize: '14px', fontWeight: '900' }}>
+                <span>CALCULATED NET AMOUNT:</span>
+                <span style={{ color: '#047857' }}>{formatINR(grossAmount)}</span>
+              </div>
+            </div>
+
+            <div style={{ borderTop: '1px solid #ccc', paddingTop: '8px', fontSize: '10px', color: '#666', display: 'flex', justifyContent: 'space-between' }}>
+              <span>AgroSync Verified Ledger Record</span>
+              <span>Printed on: {new Date().toLocaleString()}</span>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Screen Interactive Modal */}
       <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in no-print">
@@ -167,15 +173,17 @@ export const ViewWeightDetailsModal: React.FC<ViewWeightDetailsModalProps> = ({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <button 
-                type="button"
-                onClick={handlePrint}
-                className="px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                title="Print Weight Ledger Details"
-              >
-                <Printer className="h-4 w-4 text-indigo-600" />
-                <span className="hidden sm:inline">Print Slip</span>
-              </button>
+              {allowPrint && (
+                <button 
+                  type="button"
+                  onClick={handlePrint}
+                  className="px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  title="Print Weight Ledger Details"
+                >
+                  <Printer className="h-4 w-4 text-indigo-600" />
+                  <span className="hidden sm:inline">Print Slip</span>
+                </button>
+              )}
               <button 
                 onClick={onClose}
                 className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all cursor-pointer"
@@ -302,14 +310,16 @@ export const ViewWeightDetailsModal: React.FC<ViewWeightDetailsModalProps> = ({
 
           {/* Action Footer */}
           <div className="pt-3 border-t border-slate-100 shrink-0 mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-2"
-            >
-              <Printer className="h-4 w-4" />
-              <span>Print Details</span>
-            </button>
+            {allowPrint && (
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Printer className="h-4 w-4" />
+                <span>Print Details</span>
+              </button>
+            )}
             <button
               onClick={onClose}
               className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs sm:text-sm rounded-xl transition-all shadow-md active:scale-95 cursor-pointer"
