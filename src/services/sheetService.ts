@@ -537,6 +537,9 @@ export async function fetchTransactions(): Promise<Transaction[]> {
         const bags = parseInt(item.bags || '0', 10);
         const rate = parseFloat(item.rate || '0');
         const subUserRate = item.sub_user_rate !== undefined && item.sub_user_rate !== null && item.sub_user_rate !== "" ? parseFloat(item.sub_user_rate) : undefined;
+        const isTxPending = !item.sub_user_name || !String(item.sub_user_name).trim() || String(item.sub_user_name).toLowerCase() === 'pending' || !item.weight || !String(item.weight).trim();
+        const rawTotal = parseFloat(String(item.total_value || '0'));
+        const totalValue = isTxPending ? 0 : (rawTotal > 0 ? rawTotal : (bags * (subUserRate || rate)));
         return {
           timestamp: item.timestamp || new Date().toISOString(),
           transactionId: item.transaction_id || '',
@@ -545,7 +548,7 @@ export async function fetchTransactions(): Promise<Transaction[]> {
           bags: bags,
           rate: rate,
           subUserRate: subUserRate,
-          totalValue: parseFloat(String(item.total_value || '0')) || (bags * (subUserRate || rate)),
+          totalValue: totalValue,
           agent: item.agent || '',
           mark: item.mark || currentTenant.marks[0] || 'BRT',
           weight: item.weight || '',
@@ -598,7 +601,9 @@ export async function syncAllToSupabase(): Promise<{ success: boolean; message: 
       bags: Number(tx.bags) || 0,
       rate: Number(tx.rate) || 0,
       sub_user_rate: tx.subUserRate !== undefined && tx.subUserRate !== null && !isNaN(Number(tx.subUserRate)) ? Number(tx.subUserRate) : null,
-      total_value: Number(tx.totalValue) || (Number(tx.bags) * (Number(tx.subUserRate) || Number(tx.rate))),
+      total_value: (!tx.subUserName || !String(tx.subUserName).trim() || String(tx.subUserName).toLowerCase() === 'pending' || !tx.weight || !String(tx.weight).trim())
+        ? 0 
+        : (Number(tx.totalValue) || (Number(tx.bags) * (Number(tx.subUserRate) || Number(tx.rate)))),
       agent: tx.agent || '',
       mark: tx.mark || currentTenant.marks[0] || 'BRT',
       weight: tx.weight || '',
@@ -640,7 +645,8 @@ export async function addTransaction(
 ): Promise<{ success: boolean; message: string; data?: Transaction }> {
   const tenant = getCurrentTenant();
   const normalizedSubUrl = normalizeSubUrl(tenant.subUrl);
-  const totalValue = tx.bags * tx.rate;
+  const isPending = !tx.weight || !String(tx.weight).trim() || !tx.subUserName || !String(tx.subUserName).trim();
+  const totalValue = isPending ? 0 : (tx.bags * tx.rate);
   const newTx: Transaction = {
     ...tx,
     subUrl: normalizedSubUrl,
@@ -666,7 +672,7 @@ export async function addTransaction(
       bags: Number(newTx.bags) || 0,
       rate: Number(newTx.rate) || 0,
       sub_user_rate: newTx.subUserRate !== undefined && newTx.subUserRate !== null && !isNaN(Number(newTx.subUserRate)) ? Number(newTx.subUserRate) : null,
-      total_value: Number(newTx.totalValue) || (Number(newTx.bags) * (Number(newTx.subUserRate) || Number(newTx.rate))),
+      total_value: isPending ? 0 : (Number(newTx.totalValue) || (Number(newTx.bags) * (Number(newTx.subUserRate) || Number(newTx.rate)))),
       agent: newTx.agent,
       mark: newTx.mark,
       weight: newTx.weight || '',

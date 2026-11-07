@@ -890,7 +890,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] text-slate-500">
                       <div>Agent: <span className="font-semibold text-slate-800 break-words">{tx.agent}</span></div>
                       <div>Bags: <span className="font-semibold text-slate-800 font-mono">{tx.bags}</span></div>
-                      <div>Value: <span className="font-semibold text-emerald-700 font-mono">{formatINR(tx.totalValue)}</span></div>
+                      <div>Value: <span className="font-semibold text-emerald-700 font-mono">{(!tx.subUserName || !tx.subUserName.trim() || tx.subUserName.toLowerCase() === 'pending' || !tx.weight || !tx.weight.trim()) ? '' : formatINR(tx.totalValue)}</span></div>
                       <div>Weight: <span className="font-semibold text-slate-800 font-mono">{tx.weight ? 'Added' : 'Pending'}</span></div>
                     </div>
                     <div className="flex justify-between items-center mt-1 border-t border-slate-200/30 pt-1.5">

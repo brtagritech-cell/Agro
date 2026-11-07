@@ -105,6 +105,11 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
     return { list, pendingCount };
   }, [transactions]);
 
+  // Check if sub-user has not completed logging weights / is pending
+  const isSubUserPending = (tx: Transaction) => {
+    return !tx.subUserName || !tx.subUserName.trim() || tx.subUserName.toLowerCase() === 'pending' || !tx.weight || !tx.weight.trim();
+  };
+
   // Currency Formatter for INR
   const formatINR = (value: number | undefined | null) => {
     const num = (value === undefined || value === null || isNaN(value)) ? 0 : value;
@@ -138,10 +143,12 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
     return matchesSearch && matchesMark && matchesDate && matchesSubUser;
   });
 
-  // Calculate Metrics
+  // Calculate Metrics (Total Value only consolidates verified/completed sub-user transactions)
   const totalTransactions = filteredTransactions.length;
   const totalBags = filteredTransactions.reduce((sum, tx) => sum + tx.bags, 0);
-  const consolidatedValue = filteredTransactions.reduce((sum, tx) => sum + tx.totalValue, 0);
+  const consolidatedValue = filteredTransactions
+    .filter(tx => !isSubUserPending(tx))
+    .reduce((sum, tx) => sum + (tx.totalValue || 0), 0);
 
 
 
@@ -651,7 +658,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                   </div>
                   <div className="text-right">
                     <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Total Value</span>
-                    <span className="text-sm sm:text-base font-bold font-mono text-emerald-700">{formatINR(tx.totalValue)}</span>
+                    <span className="text-sm sm:text-base font-bold font-mono text-emerald-700">{isSubUserPending(tx) ? '' : formatINR(tx.totalValue)}</span>
                   </div>
                 </div>
               </div>
@@ -693,7 +700,9 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                       <td className="py-3.5 px-3 font-mono text-slate-500 whitespace-nowrap">{tx.date}</td>
                       <td className="py-3.5 px-3 text-right font-mono text-slate-900 whitespace-nowrap">{tx.bags.toLocaleString()}</td>
                       <td className="py-3.5 px-3 text-right font-mono text-slate-600 whitespace-nowrap">{formatINR(tx.rate)}</td>
-                      <td className="py-3.5 px-3 text-right font-mono text-emerald-700 font-bold whitespace-nowrap">{formatINR(tx.totalValue)}</td>
+                      <td className="py-3.5 px-3 text-right font-mono text-emerald-700 font-bold whitespace-nowrap">
+                        {isSubUserPending(tx) ? '' : formatINR(tx.totalValue)}
+                      </td>
 
                       {/* Sub-User Details Columns */}
                       <td className="py-3.5 px-3.5 bg-indigo-50/20 whitespace-nowrap">
@@ -870,7 +879,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                       {tx.weight ? tx.weight.split('[')[0].trim() : 'Pending'}
                     </td>
                     <td style={{ padding: '5px 4px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold', color: '#047857' }}>
-                      {formatINR(tx.totalValue)}
+                      {isSubUserPending(tx) ? '' : formatINR(tx.totalValue)}
                     </td>
                   </tr>
                 ))}
