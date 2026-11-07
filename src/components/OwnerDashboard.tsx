@@ -10,9 +10,21 @@ import {
   HelpCircle, 
   Clock, 
   Database,
-  Zap
+  Zap,
+  Users,
+  Tag,
+  Trash2,
+  AlertCircle,
+  Save
 } from 'lucide-react';
-import { type Transaction, getShortAgentName, isGoogleSheetsEnabled, getCurrentTenant, getTenants, saveTenants } from '../services/sheetService';
+import { 
+  type Transaction, 
+  getShortAgentName, 
+  isGoogleSheetsEnabled, 
+  getCurrentTenant, 
+  updateBranchConfiguration,
+  type TenantConfig
+} from '../services/sheetService';
 import { ViewWeightDetailsModal } from './ViewWeightDetailsModal';
 import { SupabaseConnectModal } from './SupabaseConnectModal';
 
@@ -60,7 +72,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   onTabChange,
   onRefresh
 }) => {
-  const currentTenant = getCurrentTenant();
+  const [tenant, setTenant] = useState<TenantConfig>(() => getCurrentTenant());
+  const currentTenant = tenant;
 
   // Calendar States
   const [currentDate, setCurrentDate] = useState<Date>(() => getISTDate());
@@ -77,57 +90,247 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
 
   useEffect(() => {
-    if (currentTenant?.marks && currentTenant.marks.length > 0) {
-      setMark(currentTenant.marks[0]);
+    if (tenant?.marks && tenant.marks.length > 0) {
+      if (!mark || !tenant.marks.includes(mark)) {
+        setMark(tenant.marks[0]);
+      }
     }
-  }, [currentTenant.subUrl]);
+  }, [tenant.subUrl, tenant.marks]);
 
-  // Master Data Modal states
+  // Branch Settings & Master Data Modal states
   const [isMasterDataOpen, setIsMasterDataOpen] = useState(false);
-  const [masterBagCost, setMasterBagCost] = useState<string>(String(currentTenant.bagCost ?? 25));
-  const [masterTaram, setMasterTaram] = useState<string>(String(currentTenant.taram ?? 1.100));
+  const [masterTab, setModalTab] = useState<'subusers' | 'marks' | 'pricing' | 'agents'>('subusers');
+
+  // Sub-Users state
+  const [branchSubUsers, setBranchSubUsers] = useState<{ name: string; password: string }[]>([]);
+  const [newBranchSubUserName, setNewBranchSubUserName] = useState('');
+  const [newBranchSubUserPassword, setNewBranchSubUserPassword] = useState('');
+  const [branchSubUserError, setBranchSubUserError] = useState('');
+
+  // Marks state
+  const [branchMarks, setBranchMarks] = useState<string[]>([]);
+  const [newBranchMark, setNewBranchMark] = useState('');
+  const [branchMarkError, setBranchMarkError] = useState('');
+
+  // Agents state
+  const [branchAgents, setBranchAgents] = useState<string[]>([]);
+  const [newBranchAgent, setNewBranchAgent] = useState('');
+  const [branchAgentError, setBranchAgentError] = useState('');
+
+  // Pricing state
+  const [masterBagCost, setMasterBagCost] = useState<string>(String(tenant.bagCost ?? 25));
+  const [masterTaram, setMasterTaram] = useState<string>(String(tenant.taram ?? 1.100));
   const [masterError, setMasterError] = useState('');
   const [isSavingMaster, setIsSavingMaster] = useState(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
 
   useEffect(() => {
-    setMasterBagCost(String(currentTenant.bagCost ?? 25));
-    setMasterTaram(String(currentTenant.taram ?? 1.100));
-  }, [currentTenant.subUrl, currentTenant.bagCost, currentTenant.taram]);
+    setMasterBagCost(String(tenant.bagCost ?? 25));
+    setMasterTaram(String(tenant.taram ?? 1.100));
+  }, [tenant.subUrl, tenant.bagCost, tenant.taram]);
 
-  const handleSaveMasterData = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const openBranchSettingsModal = (initialTab: 'subusers' | 'marks' | 'pricing' | 'agents' = 'subusers') => {
+    const t = getCurrentTenant();
+    setTenant(t);
+    setModalTab(initialTab);
+
+    // Format sub-users
+    const formattedSubUsers = (t.subUsers || []).map(name => ({
+      name,
+      password: (t.subUserPasswords && t.subUserPasswords[name]) ? String(t.subUserPasswords[name]) : t.ownerPassword || '1234'
+    }));
+    setBranchSubUsers(formattedSubUsers);
+    setNewBranchSubUserName('');
+    setNewBranchSubUserPassword('');
+    setBranchSubUserError('');
+
+    setBranchMarks([...(t.marks || [])]);
+    setNewBranchMark('');
+    setBranchMarkError('');
+
+    setBranchAgents([...(t.agents || [])]);
+    setNewBranchAgent('');
+    setBranchAgentError('');
+
+    setMasterBagCost(String(t.bagCost ?? 25));
+    setMasterTaram(String(t.taram ?? 1.100));
     setMasterError('');
+    setSaveSuccessMsg('');
+    setIsMasterDataOpen(true);
+  };
+
+  const handleAddBranchSubUser = () => {
+    const trimmedName = newBranchSubUserName.trim();
+    const trimmedPass = newBranchSubUserPassword.trim();
+
+    if (!trimmedName && !trimmedPass) {
+      setBranchSubUserError('Please enter sub-user name and password before adding.');
+      return;
+    }
+
+    if (!trimmedName) {
+      setBranchSubUserError('Please enter a sub-user name before adding.');
+      return;
+    }
+
+    if (!trimmedPass) {
+      setBranchSubUserError('Please enter a sub-user password before adding.');
+      return;
+    }
+
+    if (branchSubUsers.some(su => su.name.toLowerCase() === trimmedName.toLowerCase())) {
+      setBranchSubUserError(`Sub-user "${trimmedName}" is already added for this branch.`);
+      return;
+    }
+
+    setBranchSubUsers(prev => [
+      ...prev,
+      {
+        name: trimmedName,
+        password: trimmedPass
+      }
+    ]);
+    setNewBranchSubUserName('');
+    setNewBranchSubUserPassword('');
+    setBranchSubUserError('');
+  };
+
+  const handleUpdateBranchSubUser = (index: number, field: 'name' | 'password', value: string) => {
+    setBranchSubUsers(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
+
+  const handleRemoveBranchSubUser = (index: number) => {
+    setBranchSubUsers(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddBranchMark = () => {
+    const trimmed = newBranchMark.trim().toUpperCase();
+    if (!trimmed) {
+      setBranchMarkError('Please enter a brand mark before adding.');
+      return;
+    }
+    if (branchMarks.includes(trimmed)) {
+      setBranchMarkError(`Brand Mark "${trimmed}" is already added for this branch.`);
+      return;
+    }
+    setBranchMarks(prev => [...prev, trimmed]);
+    setNewBranchMark('');
+    setBranchMarkError('');
+  };
+
+  const handleRemoveBranchMark = (index: number) => {
+    if (branchMarks.length <= 1) {
+      setBranchMarkError('At least one brand mark must remain configured.');
+      return;
+    }
+    setBranchMarks(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddBranchAgent = () => {
+    const trimmed = newBranchAgent.trim();
+    if (!trimmed) {
+      setBranchAgentError('Please enter a commission agent name before adding.');
+      return;
+    }
+    if (branchAgents.some(a => a.toLowerCase() === trimmed.toLowerCase())) {
+      setBranchAgentError(`Commission Agent "${trimmed}" is already added for this branch.`);
+      return;
+    }
+    setBranchAgents(prev => [...prev, trimmed]);
+    setNewBranchAgent('');
+    setBranchAgentError('');
+  };
+
+  const handleRemoveBranchAgent = (index: number) => {
+    setBranchAgents(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSaveBranchSettings = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setMasterError('');
+    setSaveSuccessMsg('');
+
     const parsedCost = parseFloat(masterBagCost);
     const parsedTaram = parseFloat(masterTaram);
 
     if (isNaN(parsedCost) || parsedCost < 0) {
       setMasterError('Bag Cost must be a valid non-negative number.');
+      setModalTab('pricing');
       return;
     }
     if (isNaN(parsedTaram) || parsedTaram <= 0) {
       setMasterError('Taram (Tare weight per bag) must be a positive number.');
+      setModalTab('pricing');
       return;
     }
 
+    // Auto-commit any pending inputs
+    let finalMarks = [...branchMarks];
+    if (newBranchMark.trim()) {
+      const pm = newBranchMark.trim().toUpperCase();
+      if (!finalMarks.includes(pm)) finalMarks.push(pm);
+    }
+    if (finalMarks.length === 0) {
+      setMasterError('At least one Brand Mark must be configured.');
+      setModalTab('marks');
+      return;
+    }
+
+    let finalAgents = [...branchAgents];
+    if (newBranchAgent.trim()) {
+      const pa = newBranchAgent.trim();
+      if (!finalAgents.includes(pa)) finalAgents.push(pa);
+    }
+
+    let finalSubUsersList = [...branchSubUsers];
+    if (newBranchSubUserName.trim()) {
+      finalSubUsersList.push({
+        name: newBranchSubUserName.trim(),
+        password: newBranchSubUserPassword.trim() || tenant.ownerPassword || '1234'
+      });
+    }
+
+    const subUsers: string[] = [];
+    const subUserPasswords: { [username: string]: string } = {};
+
+    finalSubUsersList.forEach(item => {
+      const name = item.name.trim();
+      if (name) {
+        if (!subUsers.includes(name)) {
+          subUsers.push(name);
+        }
+        subUserPasswords[name] = item.password.trim() || tenant.ownerPassword || '1234';
+      }
+    });
+
     setIsSavingMaster(true);
     try {
-      const tenants = getTenants();
-      const updated = tenants.map(t => {
-        if (t.subUrl === currentTenant.subUrl) {
-          return {
-            ...t,
-            bagCost: parsedCost,
-            taram: parsedTaram
-          };
-        }
-        return t;
+      const result = await updateBranchConfiguration(tenant.subUrl, {
+        subUsers,
+        subUserPasswords,
+        marks: finalMarks,
+        agents: finalAgents,
+        bagCost: parsedCost,
+        taram: parsedTaram
       });
-      saveTenants(updated);
-      setIsMasterDataOpen(false);
-      alert('Master Data updated successfully and sync scheduled!');
-      window.location.reload();
-    } catch (err) {
-      setMasterError('Failed to save Master Data.');
+
+      const updatedTenant = getCurrentTenant();
+      setTenant(updatedTenant);
+      if (finalMarks.length > 0 && !finalMarks.includes(mark)) {
+        setMark(finalMarks[0]);
+      }
+      
+      setSaveSuccessMsg(result.message || 'Branch settings and master data synced to database successfully!');
+      setTimeout(() => {
+        setIsMasterDataOpen(false);
+      }, 900);
+      onRefresh?.();
+    } catch (err: any) {
+      setMasterError(err?.message || 'Failed to save and sync with database.');
     } finally {
       setIsSavingMaster(false);
     }
@@ -400,14 +603,20 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <button
-            onClick={() => {
-              setMasterError('');
-              setIsMasterDataOpen(true);
-            }}
+            onClick={() => openBranchSettingsModal('subusers')}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 sm:px-5 sm:py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 rounded-xl font-semibold active:scale-[0.98] transition-all text-xs sm:text-sm cursor-pointer shadow-2xs"
+            title="Manage Sub-Users & Brand Marks for this branch"
+          >
+            <Users className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-indigo-600" />
+            <span>Sub-Users & Marks</span>
+          </button>
+          <button
+            onClick={() => openBranchSettingsModal('pricing')}
             className="flex items-center justify-center gap-2 px-4 py-2.5 sm:px-5 sm:py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl font-semibold active:scale-[0.98] transition-all text-xs sm:text-sm cursor-pointer"
+            title="Change Bag Cost and Taram for this branch"
           >
             <Database className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-indigo-600" />
-            Change Master Data
+            <span>Change Master Data</span>
           </button>
           <button
             onClick={() => {
@@ -417,7 +626,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
             className="flex items-center justify-center gap-2 px-4 py-2.5 sm:px-5 sm:py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold shadow-lg shadow-emerald-600/25 active:scale-[0.98] transition-all text-xs sm:text-sm"
           >
             <Plus className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
-            Add New Transaction
+            <span>Add New Transaction</span>
           </button>
         </div>
       </div>
@@ -737,15 +946,25 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
               {/* Mark Dropdown */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Brand Name / Mark
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    Brand Name / Mark
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => openBranchSettingsModal('marks')}
+                    className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Add New Mark</span>
+                  </button>
+                </div>
                 <select
                   value={mark}
                   onChange={(e) => setMark(e.target.value)}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-medium appearance-none cursor-pointer"
                 >
-                  {(currentTenant?.marks || []).map((m) => (
+                  {(tenant?.marks || currentTenant?.marks || []).map((m) => (
                     <option key={m} value={m}>
                       {m}
                     </option>
@@ -912,21 +1131,25 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
         />
       )}
 
-      {/* Change Master Data Modal */}
+      {/* Branch Settings & Master Data Modal */}
       {isMasterDataOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
-          <div className="w-full max-w-md md:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 sm:space-y-5 animate-slide-up max-h-[92vh] overflow-y-auto">
+          <div className="w-full max-w-lg md:max-w-xl lg:max-w-2xl bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 animate-slide-up max-h-[92vh] overflow-y-auto">
             {/* Mobile Sheet Drag Handle */}
             <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mb-2 sm:hidden" />
             
             {/* Header */}
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div>
-                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                  <Database className="h-5 w-5 text-indigo-600" />
-                  <span>Change Master Data</span>
+                <h3 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
+                    <Database className="h-4.5 w-4.5" />
+                  </div>
+                  <span>Branch Settings & Master Data</span>
                 </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">Edit pricing and operational parameters for this branch</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Manage sub-users, marks, and parameters for branch <code className="bg-slate-100 font-mono font-bold px-1.5 py-0.5 rounded text-indigo-700">{tenant.subUrl}</code>
+                </p>
               </div>
               <button 
                 onClick={() => setIsMasterDataOpen(false)}
@@ -936,72 +1159,441 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               </button>
             </div>
 
-            {/* Error message */}
+            {/* Modal Navigation Tabs */}
+            <div className="flex border-b border-slate-100 gap-1.5 overflow-x-auto pb-1 text-xs scrollbar-none">
+              <button
+                type="button"
+                onClick={() => setModalTab('subusers')}
+                className={`flex items-center gap-1.5 px-3 py-2 font-bold rounded-xl transition-all shrink-0 cursor-pointer ${
+                  masterTab === 'subusers'
+                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Sub-Users ({branchSubUsers.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalTab('marks')}
+                className={`flex items-center gap-1.5 px-3 py-2 font-bold rounded-xl transition-all shrink-0 cursor-pointer ${
+                  masterTab === 'marks'
+                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Tag className="w-3.5 h-3.5" />
+                <span>Allowed Marks ({branchMarks.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalTab('pricing')}
+                className={`flex items-center gap-1.5 px-3 py-2 font-bold rounded-xl transition-all shrink-0 cursor-pointer ${
+                  masterTab === 'pricing'
+                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Database className="w-3.5 h-3.5" />
+                <span>Master Rates & Taram</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalTab('agents')}
+                className={`flex items-center gap-1.5 px-3 py-2 font-bold rounded-xl transition-all shrink-0 cursor-pointer ${
+                  masterTab === 'agents'
+                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Agents ({branchAgents.length})</span>
+              </button>
+            </div>
+
+            {/* Error & Success Alerts */}
             {masterError && (
-              <div className="p-3 bg-rose-50 text-rose-800 border border-rose-100 rounded-xl text-xs font-medium">
-                {masterError}
+              <div className="p-3 bg-rose-50 text-rose-800 border border-rose-200 rounded-xl text-xs font-semibold flex items-center gap-2 animate-fadeIn">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{masterError}</span>
+              </div>
+            )}
+            {saveSuccessMsg && (
+              <div className="p-3 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-semibold flex items-center gap-2 animate-fadeIn">
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{saveSuccessMsg}</span>
               </div>
             )}
 
-            <form onSubmit={handleSaveMasterData} className="space-y-4">
-              {/* Bag Cost Input */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Bag Cost (₹ per Bag)
-                </label>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0"
-                  required
-                  placeholder="e.g. 10.00"
-                  value={masterBagCost}
-                  onChange={(e) => setMasterBagCost(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-semibold font-mono"
-                />
+            {/* TAB 1: AUTHORIZED SUB-USERS */}
+            {masterTab === 'subusers' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Authorized Sub-Users ({branchSubUsers.length})
+                    </h4>
+                    <p className="text-[11px] text-slate-400">
+                      Sub-users can log in to this branch portal and record physical weights
+                    </p>
+                  </div>
+                </div>
+
+                {/* Sub-users list */}
+                {branchSubUsers.length > 0 && (
+                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                    <div className="grid grid-cols-12 gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
+                      <div className="col-span-6 sm:col-span-7">Sub-User Name</div>
+                      <div className="col-span-5 sm:col-span-4">Password / Passcode</div>
+                      <div className="col-span-1 text-center"></div>
+                    </div>
+                    {branchSubUsers.map((su, idx) => (
+                      <div key={idx} className="grid grid-cols-12 gap-2 items-center">
+                        <div className="col-span-6 sm:col-span-7">
+                          <input
+                            type="text"
+                            placeholder="e.g. Ramesh"
+                            value={su.name}
+                            onChange={(e) => handleUpdateBranchSubUser(idx, 'name', e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:border-indigo-600 focus:bg-white text-xs font-semibold text-slate-800 transition-all shadow-2xs"
+                          />
+                        </div>
+                        <div className="col-span-5 sm:col-span-4">
+                          <input
+                            type="text"
+                            placeholder="Passcode"
+                            value={su.password}
+                            onChange={(e) => handleUpdateBranchSubUser(idx, 'password', e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:border-indigo-600 focus:bg-white text-xs font-mono font-bold text-slate-800 transition-all shadow-2xs"
+                          />
+                        </div>
+                        <div className="col-span-1 flex justify-center">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveBranchSubUser(idx)}
+                            title="Remove sub-user"
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add New Sub-User Input Row */}
+                <div className="pt-2 border-t border-slate-200/80">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        placeholder="New sub-user name (e.g. Rajesh)"
+                        value={newBranchSubUserName}
+                        onChange={(e) => {
+                          setNewBranchSubUserName(e.target.value);
+                          if (branchSubUserError) setBranchSubUserError('');
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddBranchSubUser();
+                          }
+                        }}
+                        className={`w-full px-3 py-2 bg-white border rounded-xl focus:border-indigo-600 text-xs font-semibold text-slate-800 transition-all shadow-2xs ${
+                          branchSubUserError && !newBranchSubUserName.trim() ? 'border-rose-400 ring-1 ring-rose-200' : 'border-slate-200'
+                        }`}
+                      />
+                    </div>
+                    <div className="w-full sm:w-44">
+                      <input
+                        type="text"
+                        placeholder="Password (e.g. 1234)"
+                        value={newBranchSubUserPassword}
+                        onChange={(e) => {
+                          setNewBranchSubUserPassword(e.target.value);
+                          if (branchSubUserError) setBranchSubUserError('');
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddBranchSubUser();
+                          }
+                        }}
+                        className={`w-full px-3 py-2 bg-white border rounded-xl focus:border-indigo-600 text-xs font-mono font-bold text-slate-800 transition-all shadow-2xs ${
+                          branchSubUserError && !newBranchSubUserPassword.trim() ? 'border-rose-400 ring-1 ring-rose-200' : 'border-slate-200'
+                        }`}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddBranchSubUser}
+                      className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm shadow-indigo-600/20 transition-all shrink-0 active:scale-95 cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Sub-User
+                    </button>
+                  </div>
+
+                  {branchSubUserError ? (
+                    <div className="flex items-center gap-1.5 p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold mt-2 animate-fadeIn">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                      <span>{branchSubUserError}</span>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-400 mt-1.5">
+                      Both sub-user name and passcode are required when adding a new sub-user.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: ALLOWED MARKS */}
+            {masterTab === 'marks' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Allowed Marks / Brands ({branchMarks.length})
+                    </h4>
+                    <p className="text-[11px] text-slate-400">
+                      These brand marks will appear in transaction dropdowns for this branch
+                    </p>
+                  </div>
+                </div>
+
+                {/* Add Mark Input Row */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Enter mark name (e.g. BRT, RS, TS)"
+                    value={newBranchMark}
+                    onChange={(e) => {
+                      setNewBranchMark(e.target.value);
+                      if (branchMarkError) setBranchMarkError('');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddBranchMark();
+                      }
+                    }}
+                    className={`flex-1 px-3 py-2 bg-white border rounded-xl focus:border-indigo-600 text-xs font-bold font-mono uppercase text-slate-800 transition-all shadow-2xs ${
+                      branchMarkError ? 'border-rose-400 ring-1 ring-rose-200' : 'border-slate-200'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddBranchMark}
+                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm shadow-indigo-600/20 transition-all shrink-0 active:scale-95 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Mark
+                  </button>
+                </div>
+
+                {branchMarkError && (
+                  <div className="flex items-center gap-1.5 p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold animate-fadeIn">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                    <span>{branchMarkError}</span>
+                  </div>
+                )}
+
+                {/* Added Marks Display List */}
+                <div className="flex flex-wrap gap-1.5 p-2.5 bg-slate-50 border border-slate-200 rounded-xl min-h-[46px] items-center">
+                  {branchMarks.length === 0 ? (
+                    <span className="text-[11px] text-slate-400 italic">No marks added yet. Enter a mark name above and click Add Mark.</span>
+                  ) : (
+                    branchMarks.map((m, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-indigo-150 text-indigo-800 font-bold font-mono text-xs rounded-lg shadow-2xs group"
+                      >
+                        <span>{m}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBranchMark(idx)}
+                          className="text-indigo-400 hover:text-rose-600 hover:bg-rose-50 p-0.5 rounded transition-colors cursor-pointer"
+                          title={`Remove ${m}`}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: MASTER RATES (PRICING & TARAM) */}
+            {masterTab === 'pricing' && (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Master Calculation Rates
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Default parameters for calculating net values and weights for this branch
+                  </p>
+                </div>
+
+                {/* Bag Cost Input */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Bag Cost (₹ per Bag)
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    required
+                    placeholder="e.g. 25.00"
+                    value={masterBagCost}
+                    onChange={(e) => setMasterBagCost(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-semibold font-mono"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Cost deducted per bag during gross weight calculation.</p>
+                </div>
+
+                {/* Taram (Tare Weight per Bag) */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Taram (Tare weight per bag - kg)
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.001"
+                    min="0.001"
+                    required
+                    placeholder="e.g. 1.100"
+                    value={masterTaram}
+                    onChange={(e) => setMasterTaram(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-semibold font-mono"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Standard bag deduction in kilograms (e.g. 1.100 kg per bag).</p>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: COMMISSION AGENTS */}
+            {masterTab === 'agents' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Allowed Commission Agents ({branchAgents.length})
+                    </h4>
+                    <p className="text-[11px] text-slate-400">
+                      Commission agents available for transaction entries for this branch
+                    </p>
+                  </div>
+                </div>
+
+                {/* Add Agent Input Row */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Enter commission agent name (e.g. Patel Agro)"
+                    value={newBranchAgent}
+                    onChange={(e) => {
+                      setNewBranchAgent(e.target.value);
+                      if (branchAgentError) setBranchAgentError('');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddBranchAgent();
+                      }
+                    }}
+                    className={`flex-1 px-3 py-2 bg-white border rounded-xl focus:border-indigo-600 text-xs font-medium text-slate-800 transition-all shadow-2xs ${
+                      branchAgentError ? 'border-rose-400 ring-1 ring-rose-200' : 'border-slate-200'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddBranchAgent}
+                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm shadow-indigo-600/20 transition-all shrink-0 active:scale-95 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Agent
+                  </button>
+                </div>
+
+                {branchAgentError && (
+                  <div className="flex items-center gap-1.5 p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold animate-fadeIn">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                    <span>{branchAgentError}</span>
+                  </div>
+                )}
+
+                {/* Added Agents Display List */}
+                <div className="flex flex-wrap gap-1.5 p-2.5 bg-slate-50 border border-slate-200 rounded-xl min-h-[46px] items-center">
+                  {branchAgents.length === 0 ? (
+                    <span className="text-[11px] text-slate-400 italic">No agent names added yet. Enter an agent name above and click Add Agent.</span>
+                  ) : (
+                    branchAgents.map((a, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-emerald-200 text-emerald-800 font-semibold text-xs rounded-lg shadow-2xs group"
+                      >
+                        <span>{a}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBranchAgent(idx)}
+                          className="text-emerald-500 hover:text-rose-600 hover:bg-rose-50 p-0.5 rounded transition-colors cursor-pointer"
+                          title={`Remove ${a}`}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Modal Footer with Live Sync and Action Buttons */}
+            <div className="pt-3 border-t border-slate-100 space-y-2.5">
+              <div className="flex items-center justify-between text-[11px]">
+                <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Supabase Live Sync Connected</span>
+                </div>
+                <span className="text-slate-400">All edits sync directly to database</span>
               </div>
 
-              {/* Taram (Tare Weight per Bag) */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Taram (Tare weight per bag - kg)
-                </label>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="0.001"
-                  min="0.001"
-                  required
-                  placeholder="e.g. 1.100"
-                  value={masterTaram}
-                  onChange={(e) => setMasterTaram(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-semibold font-mono"
-                />
-              </div>
-
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setIsMasterDataOpen(false)}
                   disabled={isSavingMaster}
-                  className="flex-1 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl transition-all"
+                  className="flex-1 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={() => handleSaveBranchSettings()}
                   disabled={isSavingMaster}
-                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl transition-all shadow-md shadow-emerald-600/10 flex items-center justify-center font-bold"
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl transition-all shadow-md shadow-indigo-600/20 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
                 >
                   {isSavingMaster ? (
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Syncing to Database...</span>
+                    </>
                   ) : (
-                    'Save Master Data'
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Save & Sync to Database</span>
+                    </>
                   )}
                 </button>
               </div>
-            </form>
+            </div>
 
           </div>
         </div>

@@ -277,21 +277,56 @@ export async function syncBranchesToSheet(tenants: TenantConfig[]): Promise<{ su
   }
 }
 
-export function saveTenants(tenants: TenantConfig[]): void {
+export async function saveTenants(tenants: TenantConfig[]): Promise<{ success: boolean; message: string }> {
   tenants.forEach(t => {
     t.fullLink = `${window.location.origin}${window.location.pathname}#${t.subUrl}`;
   });
   localStorage.setItem(TENANTS_STORAGE_KEY, JSON.stringify(tenants));
   
-  syncBranchesToSheet(tenants).then(res => {
+  try {
+    const res = await syncBranchesToSheet(tenants);
     if (!res.success) {
       console.warn('Background tenant sync warned:', res.message);
     } else {
       console.log('Background tenant sync success:', res.message);
     }
-  }).catch(err => {
+    return res;
+  } catch (err: any) {
     console.error('Background tenant sync error:', err);
-  });
+    return { success: false, message: err?.message || String(err) };
+  }
+}
+
+export async function updateBranchConfiguration(
+  subUrl: string,
+  updatedData: Partial<TenantConfig>
+): Promise<{ success: boolean; message: string }> {
+  const tenants = getTenants();
+  const normalized = normalizeSubUrl(subUrl).toLowerCase();
+  const index = tenants.findIndex(t => normalizeSubUrl(t.subUrl).toLowerCase() === normalized);
+  
+  if (index === -1) {
+    const newT: TenantConfig = {
+      subUrl: normalizeSubUrl(subUrl),
+      sheetUrl: '',
+      ownerId: updatedData.ownerId || 'Owner',
+      ownerPassword: updatedData.ownerPassword || '1234',
+      subUsers: updatedData.subUsers || [],
+      subUserPasswords: updatedData.subUserPasswords || {},
+      marks: updatedData.marks || [],
+      agents: updatedData.agents || [],
+      bagCost: updatedData.bagCost ?? 25,
+      taram: updatedData.taram ?? 1.100
+    };
+    tenants.push(newT);
+  } else {
+    tenants[index] = {
+      ...tenants[index],
+      ...updatedData
+    };
+  }
+
+  return await saveTenants(tenants);
 }
 
 function getTransactionsStorageKey(): string {
