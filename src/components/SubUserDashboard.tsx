@@ -14,9 +14,11 @@ import {
   Trash2,
   AlertTriangle,
   ArrowRight,
-  Check
+  Check,
+  Eye
 } from 'lucide-react';
 import { type Transaction, isGoogleSheetsEnabled, getCurrentTenant } from '../services/sheetService';
+import { ViewWeightDetailsModal } from './ViewWeightDetailsModal';
 
 const getFirstThreeDigits = (num: number): number => {
   const intPartStr = Math.floor(num).toString();
@@ -404,10 +406,23 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
   const isMarkMismatch = selectedTx ? confirmedMark !== selectedTx.mark : false;
   const hasAnyMismatch = isBagsMismatch || isRateMismatch || isMarkMismatch;
 
+  // Viewing details modal state
+  const [viewingTx, setViewingTx] = useState<Transaction | null>(null);
+  const [activeQueueFilter, setActiveQueueFilter] = useState<'all' | 'pending' | 'completed'>('all');
+
   // Sum of bags logged by this subuser today
   const totalBagsLoggedToday = todayTransactions
     .filter(tx => tx.subUserName === subUserName && tx.weight && tx.weight.trim() !== '')
     .reduce((sum, tx) => sum + tx.bags, 0);
+
+  const completedTodayCount = todayTransactions.filter(tx => tx.weight && tx.weight.trim() !== '').length;
+
+  const displayTransactions = sortedTodayTransactions.filter(tx => {
+    const hasWeight = !!(tx.weight && tx.weight.trim() !== '');
+    if (activeQueueFilter === 'pending') return !hasWeight;
+    if (activeQueueFilter === 'completed') return hasWeight;
+    return true;
+  });
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-4 sm:space-y-6 p-1 sm:p-2 pb-12 overflow-x-hidden">
@@ -484,55 +499,140 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
         </div>
       )}
 
-      {/* Queue Progress Summary Cards */}
+      {/* Queue Progress Summary Cards / Filter Tabs */}
       <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
         {/* Pending Operations Card */}
-        <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 text-white p-3.5 sm:p-5 rounded-xl sm:rounded-2xl shadow-lg shadow-emerald-700/15 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setActiveQueueFilter(prev => prev === 'pending' ? 'all' : 'pending')}
+          className={`p-3.5 sm:p-5 rounded-xl sm:rounded-2xl transition-all flex items-center justify-between text-left cursor-pointer border ${
+            activeQueueFilter === 'pending'
+              ? 'bg-gradient-to-r from-emerald-700 to-emerald-800 text-white ring-2 ring-emerald-400 shadow-md scale-[1.01]'
+              : 'bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-soft hover:shadow-md'
+          }`}
+          title="Click to view pending lots"
+        >
           <div className="space-y-0.5 sm:space-y-1">
-            <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-100">Pending Operations</span>
+            <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-100 flex items-center gap-1.5">
+              <span>Pending Operations</span>
+              {activeQueueFilter === 'pending' && (
+                <span className="bg-white/20 text-[8px] px-1 py-0.2 rounded font-mono font-bold">FILTER ON</span>
+              )}
+            </span>
             <span className="block text-lg sm:text-xl font-bold font-mono">{pendingTodayCount} Lots</span>
           </div>
           <div className="bg-emerald-500/30 p-1.5 sm:p-2 rounded-xl border border-emerald-400/20 backdrop-blur-xs shrink-0">
             <Weight className="h-4.5 w-4.5 sm:h-5 sm:w-5 text-emerald-100" />
           </div>
-        </div>
+        </button>
 
         {/* Total Bags Logged Today Card */}
-        <div className="bg-white p-3.5 sm:p-5 rounded-xl sm:rounded-2xl shadow-soft border border-slate-100 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setActiveQueueFilter(prev => prev === 'completed' ? 'all' : 'completed')}
+          className={`p-3.5 sm:p-5 rounded-xl sm:rounded-2xl transition-all flex items-center justify-between text-left cursor-pointer border ${
+            activeQueueFilter === 'completed'
+              ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-400 shadow-md scale-[1.01]'
+              : 'bg-white border-slate-100 shadow-soft hover:border-slate-200'
+          }`}
+          title="Click to view bags weights details logged today"
+        >
           <div className="space-y-0.5 sm:space-y-1">
-            <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400">Bags Logged Today</span>
+            <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <span>Bags Logged Today</span>
+              {activeQueueFilter === 'completed' && (
+                <span className="bg-emerald-200 text-emerald-900 text-[8px] px-1 py-0.2 rounded font-mono font-bold">FILTER ON</span>
+              )}
+            </span>
             <span className="block text-lg sm:text-xl font-bold font-mono text-slate-800">{totalBagsLoggedToday} Bags</span>
           </div>
           <div className="bg-slate-50 p-1.5 sm:p-2 rounded-xl border border-slate-200/50 shrink-0">
             <Inbox className="h-4.5 w-4.5 sm:h-5 sm:w-5 text-emerald-600" />
           </div>
-        </div>
+        </button>
       </div>
 
       {/* Rows list queue */}
       <div className="space-y-3">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest pl-1">Tasks Queue</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+          <div className="flex items-center gap-2">
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Tasks Queue</h3>
+            {activeQueueFilter !== 'all' && (
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                Filtered: {activeQueueFilter === 'pending' ? 'Pending Lots' : 'Completed Logged Bags'}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1 text-[11px]">
+            <button
+              type="button"
+              onClick={() => setActiveQueueFilter('all')}
+              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                activeQueueFilter === 'all'
+                  ? 'bg-slate-800 text-white shadow-xs'
+                  : 'text-slate-500 hover:bg-slate-100'
+              }`}
+            >
+              All ({sortedTodayTransactions.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveQueueFilter('pending')}
+              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                activeQueueFilter === 'pending'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-500 hover:bg-slate-100'
+              }`}
+            >
+              Pending ({pendingTodayCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveQueueFilter('completed')}
+              className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                activeQueueFilter === 'completed'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-500 hover:bg-slate-100'
+              }`}
+            >
+              Logged ({completedTodayCount})
+            </button>
+          </div>
+        </div>
 
         {isLoading && sortedTodayTransactions.length === 0 ? (
           <div className="bg-white rounded-2xl p-10 text-center border border-slate-100 shadow-soft">
             <Loader2 className="h-8 w-8 text-emerald-600 animate-spin mx-auto mb-2" />
             <p className="text-xs font-semibold text-slate-500">Loading ledger rows...</p>
           </div>
-        ) : sortedTodayTransactions.length === 0 ? (
-          <div className="bg-white rounded-2xl p-10 text-center border border-slate-100 shadow-soft">
+        ) : displayTransactions.length === 0 ? (
+          <div className="bg-white rounded-2xl p-8 sm:p-10 text-center border border-slate-100 shadow-soft">
             <Inbox className="h-10 w-10 text-slate-300 mx-auto mb-3" />
-            <p className="font-semibold text-slate-700 text-sm">No Lots For Today</p>
-            <p className="text-xs text-slate-400 mt-1">No transaction rows have been recorded for today's date yet.</p>
-            <button
-              onClick={onRefresh}
-              className="mt-4 px-4 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all"
-            >
-              Refresh Check
-            </button>
+            <p className="font-semibold text-slate-700 text-sm">
+              {activeQueueFilter === 'completed' 
+                ? 'No Logged Bags Recorded Yet' 
+                : activeQueueFilter === 'pending' 
+                  ? 'No Pending Operations Today' 
+                  : 'No Lots For Today'}
+            </p>
+            <p className="text-xs text-slate-400 mt-1">
+              {activeQueueFilter === 'completed'
+                ? 'No transactions with completed weight metrics found for today.'
+                : 'All transactions for today have been completed or none exist.'}
+            </p>
+            {activeQueueFilter !== 'all' && (
+              <button
+                type="button"
+                onClick={() => setActiveQueueFilter('all')}
+                className="mt-3 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              >
+                Show All Lots ({sortedTodayTransactions.length})
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
-            {sortedTodayTransactions.map((tx) => {
+            {displayTransactions.map((tx) => {
               const hasWeight = !!(tx.weight && tx.weight.trim() !== '');
               const isLockedByOther = !!(tx.lockedBy && tx.lockedBy !== subUserName);
               return (
@@ -542,7 +642,7 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
                     isLockedByOther
                       ? 'border-amber-200 bg-amber-50/10 opacity-80'
                       : hasWeight 
-                        ? 'border-slate-200/40 opacity-75 bg-slate-50/20' 
+                        ? 'border-emerald-200/60 bg-emerald-50/10 hover:border-emerald-300' 
                         : 'border-slate-200/60 hover:border-emerald-200'
                   }`}
                 >
@@ -558,7 +658,7 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
                         {tx.mark}
                       </span>
                       {hasWeight && (
-                        <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 bg-slate-100 text-slate-500 rounded border border-slate-200/50 flex items-center gap-1">
+                        <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded border border-emerald-200 flex items-center gap-1">
                           <Check className="h-3 w-3" /> Done
                         </span>
                       )}
@@ -580,33 +680,50 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
                       {hasWeight && (
                         <>
                           <div className="hidden sm:inline text-slate-300">•</div>
-                          <div>Weight: <span className="text-emerald-700 font-bold font-mono break-all">{tx.weight}</span></div>
+                          <div 
+                            onClick={() => setViewingTx(tx)}
+                            className="cursor-pointer group flex items-center gap-1 hover:text-emerald-700 transition-colors"
+                            title="Click to view detailed bag weights breakdown"
+                          >
+                            <span>Weight:</span>
+                            <span className="text-emerald-700 font-bold font-mono break-all group-hover:underline">
+                              {tx.weight}
+                            </span>
+                            <Eye className="w-3.5 h-3.5 text-emerald-600 inline opacity-70 group-hover:opacity-100 shrink-0" />
+                          </div>
                         </>
                       )}
                     </div>
                   </div>
 
                   <div className="shrink-0 flex items-center justify-end w-full sm:w-auto">
-                    <button
-                      onClick={() => openWeightModal(tx)}
-                      disabled={hasWeight || isLockedByOther}
-                      className={`w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 font-semibold text-xs rounded-xl shadow-md transition-all ${
-                        hasWeight
-                          ? 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                          : isLockedByOther
+                    {hasWeight ? (
+                      <button
+                        type="button"
+                        onClick={() => setViewingTx(tx)}
+                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 font-bold text-xs rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-2xs active:scale-95 cursor-pointer transition-all"
+                        title="Click to view detailed bag weights breakdown"
+                      >
+                        <Eye className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>Weight Added • View Details</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => openWeightModal(tx)}
+                        disabled={isLockedByOther}
+                        className={`w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 font-semibold text-xs rounded-xl shadow-md transition-all ${
+                          isLockedByOther
                             ? 'bg-amber-100 border border-amber-200 text-amber-600 cursor-not-allowed shadow-none font-bold'
-                            : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/10 active:scale-[0.98]'
-                      }`}
-                    >
-                      <Scale className="h-3.5 w-3.5" />
-                      <span>
-                        {hasWeight 
-                          ? 'Weight Added' 
-                          : isLockedByOther 
-                            ? `${tx.lockedBy} is working` 
-                            : 'Add Weight'}
-                      </span>
-                    </button>
+                            : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/10 active:scale-[0.98] cursor-pointer'
+                        }`}
+                      >
+                        <Scale className="h-3.5 w-3.5" />
+                        <span>
+                          {isLockedByOther ? `${tx.lockedBy} is working` : 'Add Weight'}
+                        </span>
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -618,7 +735,9 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
       {/* Weight Optimization Dynamic Entry Modal */}
       {selectedTx && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
-          <div className="w-full sm:max-w-xl md:max-w-2xl bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 p-4 sm:p-6 lg:p-7 flex flex-col max-h-[95vh] sm:max-h-[90vh] animate-slide-up">
+          <div className="w-full sm:max-w-xl md:max-w-2xl bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 p-4 sm:p-6 lg:p-7 flex flex-col max-h-[92dvh] sm:max-h-[90vh] animate-slide-up overflow-y-auto overscroll-contain">
+            {/* Mobile Sheet Drag Handle */}
+            <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mb-2 sm:hidden shrink-0" />
             
             {/* Modal Header */}
             <div className="flex justify-between items-center border-b border-slate-100 pb-3 shrink-0">
@@ -939,6 +1058,15 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
 
           </div>
         </div>
+      )}
+
+      {/* View Weight Details Modal */}
+      {viewingTx && (
+        <ViewWeightDetailsModal
+          transaction={viewingTx}
+          onClose={() => setViewingTx(null)}
+          onUpdate={onRefresh}
+        />
       )}
 
     </div>

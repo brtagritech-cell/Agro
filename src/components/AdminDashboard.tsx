@@ -747,9 +747,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
 
       {/* Slide-Up Form Modal */}
       {isFormOpen && (
-        <div className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+        <div className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="absolute inset-0" onClick={() => setIsFormOpen(false)} />
-          <div className="w-full max-w-lg md:max-w-xl lg:max-w-2xl bg-white rounded-2xl sm:rounded-3xl shadow-premium border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 z-10 max-h-[92vh] overflow-y-auto">
+          <div className="w-full max-w-lg md:max-w-xl lg:max-w-2xl bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 z-10 max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto overscroll-contain">
+            {/* Mobile Sheet Drag Handle */}
+            <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mb-2 sm:hidden shrink-0" />
             
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div>

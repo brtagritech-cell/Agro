@@ -757,7 +757,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
             </div>
 
             {/* List of entries for the selected day */}
-            <div className="space-y-2 overflow-y-auto max-h-[300px] scrollbar-none pr-1">
+            <div className="space-y-2 overflow-y-auto max-h-[380px] sm:max-h-[440px] pr-1 overscroll-contain">
               {selectedDayEntries.length === 0 ? (
                 <div className="text-center py-8 sm:py-10 bg-slate-50 rounded-xl border border-dashed border-slate-200">
                   <HelpCircle className="h-7 w-7 sm:h-8 sm:w-8 text-slate-300 mx-auto mb-2" />
@@ -829,7 +829,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
           <div className="absolute inset-0" onClick={() => setIsFormOpen(false)} />
           
           {/* Bottom Sheet Container */}
-          <div className="w-full max-w-lg md:max-w-xl bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 animate-slide-up z-10 max-h-[92vh] overflow-y-auto">
+          <div className="w-full max-w-lg md:max-w-xl bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 animate-slide-up z-10 max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto overscroll-contain">
             {/* Mobile Sheet Drag Handle */}
             <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mb-2 sm:hidden" />
             
@@ -994,7 +994,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
       {/* Mandatory Transaction Review Modal */}
       {isReviewOpen && reviewData && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in">
-          <div className="w-full max-w-md md:max-w-lg bg-white rounded-2xl sm:rounded-3xl shadow-premium border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 sm:space-y-5 animate-slide-up max-h-[92vh] overflow-y-auto">
+          <div className="w-full max-w-md md:max-w-lg bg-white rounded-2xl sm:rounded-3xl shadow-premium border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 sm:space-y-5 animate-slide-up max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto overscroll-contain">
             
             {/* Header */}
             <div className="text-center pb-2 border-b border-slate-100">
@@ -1084,7 +1084,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
       {/* Lot Conflict Warning Modal */}
       {isConflictOpen && conflictTransaction && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in">
-          <div className="w-full max-w-md md:max-w-lg bg-white rounded-2xl sm:rounded-3xl shadow-premium border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 animate-slide-up max-h-[92vh] overflow-y-auto">
+          <div className="w-full max-w-md md:max-w-lg bg-white rounded-2xl sm:rounded-3xl shadow-premium border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 animate-slide-up max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto overscroll-contain">
             <div className="text-center pb-1 border-b border-slate-100">
               <div className="h-10 w-10 sm:h-12 sm:w-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-2">
                 <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6" />
@@ -1134,7 +1134,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
       {/* Branch Settings & Master Data Modal */}
       {isMasterDataOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
-          <div className="w-full max-w-lg md:max-w-xl lg:max-w-2xl bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 animate-slide-up max-h-[92vh] overflow-y-auto">
+          <div className="w-full max-w-lg md:max-w-xl lg:max-w-2xl bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 animate-slide-up max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto overscroll-contain">
             {/* Mobile Sheet Drag Handle */}
             <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mb-2 sm:hidden" />
             

@@ -483,7 +483,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
 
           {/* Table View (shown always on desktop, and on mobile when Table mode selected) */}
           <div className={`${mobileView === 'table' ? 'block' : 'hidden'} lg:block bg-white rounded-2xl shadow-soft border border-slate-100 overflow-hidden`}>
-            <div className="overflow-x-auto max-h-[calc(100vh-280px)] min-h-[350px]">
+            <div className="overflow-x-auto max-h-[calc(100dvh-280px)] min-h-[350px] overscroll-contain">
               <table className="w-full border-collapse text-left">
                 <thead className="bg-slate-50 text-[11px] xl:text-xs font-semibold text-slate-500 uppercase tracking-wider sticky top-0 z-1 whitespace-nowrap">
                   <tr>

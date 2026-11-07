@@ -201,7 +201,7 @@ export const SupabaseConnectModal: React.FC<SupabaseConnectModalProps> = ({ isOp
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in overflow-y-auto">
       <div className="absolute inset-0" onClick={onClose} />
       
-      <div className="w-full max-w-lg bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-100 p-5 sm:p-7 space-y-5 z-10 animate-slide-up max-h-[92vh] overflow-y-auto relative">
+      <div className="w-full max-w-lg bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-100 p-5 sm:p-7 space-y-5 z-10 animate-slide-up max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto overscroll-contain relative">
         
         {/* Header */}
         <div className="flex items-start justify-between border-b border-slate-100 pb-4">

@@ -205,7 +205,7 @@ function App() {
   // Sub-User Layout (Targeted Utility Screen)
   if (userRole === 'Sub-User') {
     return (
-      <div className="min-h-screen bg-[#F8F9FA] py-3 sm:py-6 lg:py-8 px-2 sm:px-6 lg:px-8 select-none w-full max-w-full overflow-x-hidden flex flex-col justify-start items-center">
+      <div className="min-h-screen min-h-[100dvh] bg-[#F8F9FA] py-3 sm:py-6 lg:py-8 px-2 sm:px-6 lg:px-8 w-full max-w-full flex flex-col justify-start items-center">
         <div className="w-full max-w-5xl">
           <SubUserDashboard
             transactions={transactions}
@@ -223,7 +223,7 @@ function App() {
 
   // Owner Layout (Calendar & Master Grid Tabs)
   return (
-    <div className="min-h-screen bg-[#F8F9FA] flex flex-col w-full max-w-full overflow-x-hidden">
+    <div className="min-h-screen min-h-[100dvh] bg-[#F8F9FA] flex flex-col w-full max-w-full">
       
       {/* Premium Header Nav Bar */}
       <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/50 w-full">
@@ -312,7 +312,7 @@ function App() {
       </header>
 
       {/* Main Workspace with extra bottom padding on mobile for the bottom navigation bar */}
-      <main className="flex-grow max-w-7xl w-full mx-auto px-2.5 sm:px-6 lg:px-8 py-3 sm:py-6 lg:py-8 pb-24 sm:pb-8">
+      <main className="flex-grow max-w-7xl w-full mx-auto px-2.5 sm:px-6 lg:px-8 py-3 sm:py-6 lg:py-8 pb-32 sm:pb-8">
         {activeTab === 'dashboard' ? (
           <OwnerDashboard
             transactions={transactions}
