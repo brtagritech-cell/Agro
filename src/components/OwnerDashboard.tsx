@@ -105,6 +105,14 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     }
   }, [tenant.subUrl, tenant.marks]);
 
+  useEffect(() => {
+    const handleSubRouteChange = () => {
+      setTenant(getCurrentTenant());
+    };
+    window.addEventListener('hashchange', handleSubRouteChange);
+    return () => window.removeEventListener('hashchange', handleSubRouteChange);
+  }, []);
+
   // Branch Settings & Master Data Modal states
   const [isMasterDataOpen, setIsMasterDataOpen] = useState(false);
   const [masterTab, setModalTab] = useState<'subusers' | 'marks' | 'pricing' | 'agents'>('subusers');

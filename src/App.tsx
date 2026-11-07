@@ -8,12 +8,20 @@ import { LogOut, LayoutDashboard, FileSpreadsheet, CheckCircle, AlertTriangle, X
 import { AdminDashboard } from './components/AdminDashboard';
 import { SupabaseConnectModal } from './components/SupabaseConnectModal';
 
+const getSubRouteStorageKey = (prefix: string) => {
+  const subUrl = getCurrentSubUrl();
+  const slug = subUrl.replace(/\//g, '').toLowerCase() || 'root';
+  return `${prefix}_${slug}`;
+};
+
 function App() {
   const [userRole, setUserRole] = useState<'Owner' | 'Sub-User' | null>(() => {
-    return (sessionStorage.getItem('agrosync_user_role') as 'Owner' | 'Sub-User') || null;
+    const key = getSubRouteStorageKey('agrosync_user_role');
+    return (sessionStorage.getItem(key) as 'Owner' | 'Sub-User') || null;
   });
   const [subUserName, setSubUserName] = useState<string>(() => {
-    return sessionStorage.getItem('agrosync_sub_user_name') || '';
+    const key = getSubRouteStorageKey('agrosync_sub_user_name');
+    return sessionStorage.getItem(key) || '';
   });
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -51,6 +59,33 @@ function App() {
     }
     
     loadData();
+
+    // Listen to hash changes (switching between branch sub routes)
+    const handleLocationChange = () => {
+      const activeSubUrl = getCurrentSubUrl();
+      if (activeSubUrl === '/admin/') {
+        setIsAdminView(true);
+      } else {
+        setIsAdminView(false);
+      }
+
+      // Re-read role and subUserName strictly for this specific sub route
+      const roleKey = getSubRouteStorageKey('agrosync_user_role');
+      const userKey = getSubRouteStorageKey('agrosync_sub_user_name');
+      const savedRole = sessionStorage.getItem(roleKey) as 'Owner' | 'Sub-User' | null;
+      const savedUser = sessionStorage.getItem(userKey) || '';
+
+      setUserRole(savedRole);
+      setSubUserName(savedUser);
+      loadData();
+    };
+
+    window.addEventListener('hashchange', handleLocationChange);
+    window.addEventListener('popstate', handleLocationChange);
+    return () => {
+      window.removeEventListener('hashchange', handleLocationChange);
+      window.removeEventListener('popstate', handleLocationChange);
+    };
   }, []);
 
   const loadData = async () => {
@@ -71,13 +106,15 @@ function App() {
 
   const handleLogin = (role: 'Owner' | 'Sub-User', name?: string) => {
     setUserRole(role);
-    sessionStorage.setItem('agrosync_user_role', role);
+    const roleKey = getSubRouteStorageKey('agrosync_user_role');
+    const userKey = getSubRouteStorageKey('agrosync_sub_user_name');
+    sessionStorage.setItem(roleKey, role);
     if (name) {
       setSubUserName(name);
-      sessionStorage.setItem('agrosync_sub_user_name', name);
+      sessionStorage.setItem(userKey, name);
     } else {
       setSubUserName('');
-      sessionStorage.removeItem('agrosync_sub_user_name');
+      sessionStorage.removeItem(userKey);
     }
     loadData(); // Reload data on login to fetch latest sheet content
   };
@@ -85,8 +122,10 @@ function App() {
   const handleLogout = () => {
     setUserRole(null);
     setSubUserName('');
-    sessionStorage.removeItem('agrosync_user_role');
-    sessionStorage.removeItem('agrosync_sub_user_name');
+    const roleKey = getSubRouteStorageKey('agrosync_user_role');
+    const userKey = getSubRouteStorageKey('agrosync_sub_user_name');
+    sessionStorage.removeItem(roleKey);
+    sessionStorage.removeItem(userKey);
     setActiveTab('dashboard');
   };
 

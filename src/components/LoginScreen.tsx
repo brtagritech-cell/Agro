@@ -70,22 +70,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onEnte
       const expectedPassword = (currentTenant.ownerPassword || '').trim();
 
       if (role === 'Owner') {
-        const isOwnerIdValid = 
-          cleanUserId.toUpperCase() === expectedOwnerId.toUpperCase() ||
-          cleanUserId.toUpperCase() === 'SPICELINK' ||
-          cleanUserId.toUpperCase() === 'AGRO' ||
-          cleanUserId.toUpperCase() === 'BRT';
-        const isPasswordValid = 
-          cleanPassword === expectedPassword || cleanPassword === '1234';
+        const isOwnerIdValid = cleanUserId.toUpperCase() === expectedOwnerId.toUpperCase();
+        const isPasswordValid = cleanPassword === expectedPassword;
 
         if (isOwnerIdValid && isPasswordValid) {
           onLoginSuccess(role, undefined);
         } else {
-          setError('Invalid ID or Password. Try again.');
+          setError(`Invalid ID or Password for branch ${currentTenant.subUrl}. Try again.`);
           setIsLoading(false);
         }
       } else {
         // Sub-User authentication checks specific passcode if configured
+        const validSubUsers = (currentTenant?.subUsers || []).map(u => u.toLowerCase());
+        if (!validSubUsers.includes(subUserNameInput.trim().toLowerCase())) {
+          setError(`User "${subUserNameInput}" is not authorized for branch ${currentTenant.subUrl}.`);
+          setIsLoading(false);
+          return;
+        }
+
         const subUserPasswords = currentTenant?.subUserPasswords || {};
         const expectedSubPassword = ((subUserPasswords[subUserNameInput] || currentTenant?.ownerPassword) || '').trim();
         

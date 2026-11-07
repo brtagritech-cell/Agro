@@ -37,74 +37,40 @@ export interface TenantConfig {
   taram?: number;
 }
 
-// Seed transactions matching the current date (June 2026) for immediate rich analytics
-const SEED_TRANSACTIONS: Transaction[] = [
-  {
-    timestamp: "2026-06-10T11:30:00.000Z",
-    transactionId: "20260610-01-450-RAM-BRT",
-    date: "2026-06-10",
-    lot: "1",
-    bags: 450,
-    rate: 45.50,
-    totalValue: 20475.00,
-    agent: "Ramesh Kumar",
-    mark: "BRT",
-    weight: "22,500 kg [15.000, 15.000]",
-    rateReason: ""
-  },
-  {
-    timestamp: "2026-06-15T09:15:00.000Z",
-    transactionId: "20260615-01-350-SURE-TS",
-    date: "2026-06-15",
-    lot: "1",
-    bags: 350,
-    rate: 52.00,
-    totalValue: 18200.00,
-    agent: "Suresh & Sons",
-    mark: "TS",
-    weight: "17,250 kg [17.250]",
-    rateReason: ""
-  },
-  {
-    timestamp: "2026-06-19T14:45:00.000Z",
-    transactionId: "20260619-01-500-PAT-RS",
-    date: "2026-06-19",
-    lot: "1",
-    bags: 500,
-    rate: 48.00,
-    totalValue: 24000.00,
-    agent: "Patel Agro",
-    mark: "RS",
-    weight: "",
-    rateReason: ""
-  },
-  {
-    timestamp: "2026-06-20T10:00:00.000Z",
-    transactionId: "20260620-01-120-BVB-BVB",
-    date: "2026-06-20",
-    lot: "1",
-    bags: 120,
-    rate: 62.50,
-    totalValue: 7500.00,
-    agent: "BVB Agencies",
-    mark: "BVB",
-    weight: "",
-    rateReason: ""
-  }
-];
-
 const SCRIPT_URL_KEY = 'agrosync_script_url';
 const TENANTS_STORAGE_KEY = 'agrosync_tenants_config';
 
 const DEFAULT_TENANTS: TenantConfig[] = [
   {
+    subUrl: '/BRT/',
+    sheetUrl: '',
+    ownerId: 'BRT',
+    ownerPassword: '1234',
+    subUsers: ['Ramesh', 'Suresh', 'Patel', 'BVB'],
+    subUserPasswords: { Ramesh: '1234', Suresh: '1234', Patel: '1234', BVB: '1234' },
+    marks: ['BRT', 'RS', 'TS', 'DV', 'BVB'],
+    agents: ['Ramesh Kumar', 'Suresh & Sons', 'Patel Agro', 'BVB Agencies'],
+    fullLink: ''
+  },
+  {
     subUrl: '/Spicelink/',
     sheetUrl: '',
     ownerId: 'Spicelink',
     ownerPassword: '1234',
-    subUsers: ['Ramesh', 'Suresh', 'Patel', 'BVB'],
-    subUserPasswords: { Ramesh: '1234', Suresh: '1234', Patel: '1234', BVB: '1234' },
-    marks: ['Spicelink', 'Agro', 'BRT', 'RS', 'TS', 'DV', 'BVB'],
+    subUsers: ['BRT', 'Ramesh', 'Suresh', 'Patel', 'BVB'],
+    subUserPasswords: { BRT: '1234', Ramesh: '1234', Suresh: '1234', Patel: '1234', BVB: '1234' },
+    marks: ['AGRO', 'BRT', 'RS', 'TS', 'DV', 'BVB'],
+    agents: ['Ramesh Kumar', 'Suresh & Sons', 'Patel Agro', 'BVB Agencies'],
+    fullLink: ''
+  },
+  {
+    subUrl: '/Agro/',
+    sheetUrl: '',
+    ownerId: 'Agro',
+    ownerPassword: '1234',
+    subUsers: ['BRT', 'Ramesh', 'Suresh', 'Patel', 'BVB'],
+    subUserPasswords: { BRT: '1234', Ramesh: '1234', Suresh: '1234', Patel: '1234', BVB: '1234' },
+    marks: ['AGRO', 'BRT', 'RS', 'TS', 'DV', 'BVB'],
     agents: ['Ramesh Kumar', 'Suresh & Sons', 'Patel Agro', 'BVB Agencies'],
     fullLink: ''
   }
@@ -188,34 +154,53 @@ export function getTenants(): TenantConfig[] {
 
 export function getCurrentTenant(): TenantConfig {
   const currentSubUrl = getCurrentSubUrl();
+  const normalizedCurrent = normalizeSubUrl(currentSubUrl).toLowerCase();
   
-  if (currentSubUrl === '/admin/') {
+  if (normalizedCurrent === '/admin/') {
     const list = getTenants();
     return list[0] || DEFAULT_TENANTS[0];
   }
   
   const tenants = getTenants();
-  const knownAliases = ['/spicelink/', '/agro/', '/brt/'];
-  const match = tenants.find(t => 
-    t.subUrl.toLowerCase() === currentSubUrl.toLowerCase() ||
-    (knownAliases.includes(currentSubUrl.toLowerCase()) && knownAliases.includes(t.subUrl.toLowerCase()))
-  );
+
+  // 1. Strict exact match on normalized subUrl
+  const match = tenants.find(t => normalizeSubUrl(t.subUrl).toLowerCase() === normalizedCurrent);
   if (match) {
     return {
       ...match,
-      subUrl: currentSubUrl
-    };
-  }
-  
-  const defaultTenant = tenants[0] || DEFAULT_TENANTS[0];
-  if (defaultTenant && currentSubUrl !== '/' && currentSubUrl !== '/admin/') {
-    return {
-      ...defaultTenant,
-      subUrl: currentSubUrl
+      subUrl: normalizeSubUrl(match.subUrl)
     };
   }
 
-  return defaultTenant;
+  // 2. Slug match (in case of /BRT/ vs BRT)
+  const currentSlug = normalizedCurrent.replace(/\//g, '');
+  const slugMatch = tenants.find(t => normalizeSubUrl(t.subUrl).replace(/\//g, '').toLowerCase() === currentSlug);
+  if (slugMatch) {
+    return {
+      ...slugMatch,
+      subUrl: normalizeSubUrl(slugMatch.subUrl)
+    };
+  }
+  
+  // 3. Fallback for custom unconfigured dynamic path: create an isolated dedicated tenant
+  if (normalizedCurrent !== '/' && normalizedCurrent !== '/admin/') {
+    const branchName = currentSlug.toUpperCase() || 'BRANCH';
+    return {
+      subUrl: normalizeSubUrl(currentSubUrl),
+      sheetUrl: '',
+      ownerId: branchName,
+      ownerPassword: '1234',
+      subUsers: [],
+      subUserPasswords: {},
+      marks: [branchName],
+      agents: [],
+      fullLink: `${window.location.origin}${window.location.pathname}#${normalizeSubUrl(currentSubUrl)}`,
+      bagCost: 25,
+      taram: 1.100
+    };
+  }
+
+  return tenants[0] || DEFAULT_TENANTS[0];
 }
 
 export function getScriptUrl(): string {
@@ -445,26 +430,38 @@ export async function updateBranchConfiguration(
 
 function getTransactionsStorageKey(): string {
   const tenant = getCurrentTenant();
-  return `agrosync_transactions_${tenant.subUrl.replace(/\//g, '_')}`;
+  const slug = tenant.subUrl.replace(/\//g, '').toLowerCase() || 'default';
+  return `agrosync_transactions_${slug}`;
 }
 
 export function getMockTransactions(): Transaction[] {
   const key = getTransactionsStorageKey();
   const data = localStorage.getItem(key);
   if (!data) {
-    localStorage.setItem(key, JSON.stringify(SEED_TRANSACTIONS));
-    return SEED_TRANSACTIONS;
+    return [];
   }
   try {
-    return JSON.parse(data);
+    const list: Transaction[] = JSON.parse(data);
+    const tenant = getCurrentTenant();
+    const currentSlug = tenant.subUrl.replace(/\//g, '').toLowerCase();
+    return list.filter(tx => {
+      if (!tx.subUrl) return false;
+      return tx.subUrl.replace(/\//g, '').toLowerCase() === currentSlug;
+    });
   } catch (e) {
-    return SEED_TRANSACTIONS;
+    return [];
   }
 }
 
 function saveMockTransactions(txs: Transaction[]): void {
   const key = getTransactionsStorageKey();
-  localStorage.setItem(key, JSON.stringify(txs));
+  const tenant = getCurrentTenant();
+  const currentSlug = tenant.subUrl.replace(/\//g, '').toLowerCase();
+  const filtered = txs.filter(tx => {
+    if (!tx.subUrl) return true;
+    return tx.subUrl.replace(/\//g, '').toLowerCase() === currentSlug;
+  });
+  localStorage.setItem(key, JSON.stringify(filtered));
 }
 
 export function getShortAgentName(name: string): string {
@@ -512,17 +509,16 @@ export async function fetchTransactions(): Promise<Transaction[]> {
       localStorage.setItem(TENANTS_STORAGE_KEY, JSON.stringify(mappedTenants));
     }
 
-    // 2. Fetch Transactions from Supabase
-    // Use flexible query so aliases (/Spicelink/, /Agro/, /BRT/, /) or casing differences don't hide transactions
-    const knownAliases = ['/spicelink/', '/agro/', '/brt/', '/'];
-    const isPrimary = knownAliases.includes(currentTenant.subUrl.toLowerCase());
-    
-    let query = supabase.from('transactions').select('*');
-    if (isPrimary) {
-      query = query.or('sub_url.ilike.%spicelink%,sub_url.ilike.%agro%,sub_url.ilike.%brt%,sub_url.eq./,sub_url.is.null');
-    } else {
-      query = query.ilike('sub_url', currentTenant.subUrl.trim());
-    }
+    // 2. Fetch Transactions from Supabase STRICTLY for this sub route
+    const currentSubUrl = normalizeSubUrl(currentTenant.subUrl);
+    const subUrlWithoutSlash = currentSubUrl.endsWith('/') ? currentSubUrl.slice(0, -1) : currentSubUrl;
+    const rawSubSlug = currentSubUrl.replace(/\//g, '');
+
+    // Strictly match only this sub route's transactions (e.g. "/BRT/" or "/BRT" or "BRT")
+    let query = supabase
+      .from('transactions')
+      .select('*')
+      .or(`sub_url.ilike.${currentSubUrl},sub_url.ilike.${subUrlWithoutSlash},sub_url.eq.${rawSubSlug}`);
 
     const { data, error } = await query;
 
@@ -531,43 +527,45 @@ export async function fetchTransactions(): Promise<Transaction[]> {
     }
 
     if (!data || data.length === 0) {
-      // Supabase is empty! Auto-upload local transactions so data is not wiped out
-      const localTxs = getMockTransactions();
-      if (localTxs.length > 0) {
-        console.log('Supabase has 0 transactions. Auto-syncing local transactions to Supabase...');
-        syncAllToSupabase().catch(console.error);
-        return localTxs;
-      }
-      return [];
+      return getMockTransactions();
     }
 
-    const formatted: Transaction[] = (data || []).map((item: any) => {
-      const bags = parseInt(item.bags || '0', 10);
-      const rate = parseFloat(item.rate || '0');
-      const subUserRate = item.sub_user_rate !== undefined && item.sub_user_rate !== null && item.sub_user_rate !== "" ? parseFloat(item.sub_user_rate) : undefined;
-      return {
-        timestamp: item.timestamp || new Date().toISOString(),
-        transactionId: item.transaction_id || '',
-        date: String(item.date || ''),
-        lot: (item.lot !== undefined && item.lot !== null) ? item.lot.toString() : '0',
-        bags: bags,
-        rate: rate,
-        subUserRate: subUserRate,
-        totalValue: parseFloat(String(item.total_value || '0')) || (bags * (subUserRate || rate)),
-        agent: item.agent || '',
-        mark: item.mark || 'Spicelink',
-        weight: item.weight || '',
-        rateReason: item.rate_reason || '',
-        lockedBy: item.locked_by || '',
-        subUrl: item.sub_url || '',
-        subUserName: item.sub_user_name || '',
-        subUserTimestamp: item.sub_user_timestamp || '',
-        grossWeight: item.gross_weight ? parseFloat(String(item.gross_weight)) : undefined,
-        bagsWeight: item.bags_weight ? parseFloat(String(item.bags_weight)) : undefined,
-        netWeight: item.net_weight ? parseFloat(String(item.net_weight)) : undefined,
-        calculatedAmount: item.calculated_amount ? parseFloat(String(item.calculated_amount)) : undefined
-      };
-    });
+    const currentSlug = rawSubSlug.toLowerCase();
+
+    const formatted: Transaction[] = (data || [])
+      .map((item: any) => {
+        const bags = parseInt(item.bags || '0', 10);
+        const rate = parseFloat(item.rate || '0');
+        const subUserRate = item.sub_user_rate !== undefined && item.sub_user_rate !== null && item.sub_user_rate !== "" ? parseFloat(item.sub_user_rate) : undefined;
+        return {
+          timestamp: item.timestamp || new Date().toISOString(),
+          transactionId: item.transaction_id || '',
+          date: String(item.date || ''),
+          lot: (item.lot !== undefined && item.lot !== null) ? item.lot.toString() : '0',
+          bags: bags,
+          rate: rate,
+          subUserRate: subUserRate,
+          totalValue: parseFloat(String(item.total_value || '0')) || (bags * (subUserRate || rate)),
+          agent: item.agent || '',
+          mark: item.mark || currentTenant.marks[0] || 'BRT',
+          weight: item.weight || '',
+          rateReason: item.rate_reason || '',
+          lockedBy: item.locked_by || '',
+          subUrl: item.sub_url || currentSubUrl,
+          subUserName: item.sub_user_name || '',
+          subUserTimestamp: item.sub_user_timestamp || '',
+          grossWeight: item.gross_weight ? parseFloat(String(item.gross_weight)) : undefined,
+          bagsWeight: item.bags_weight ? parseFloat(String(item.bags_weight)) : undefined,
+          netWeight: item.net_weight ? parseFloat(String(item.net_weight)) : undefined,
+          calculatedAmount: item.calculated_amount ? parseFloat(String(item.calculated_amount)) : undefined
+        };
+      })
+      // Absolute guarantee: filter strictly by current sub route slug in memory
+      .filter((tx: Transaction) => {
+        if (!tx.subUrl) return false;
+        const txSlug = tx.subUrl.replace(/\//g, '').toLowerCase();
+        return txSlug === currentSlug;
+      });
 
     saveMockTransactions(formatted);
     return formatted;
@@ -602,11 +600,11 @@ export async function syncAllToSupabase(): Promise<{ success: boolean; message: 
       sub_user_rate: tx.subUserRate !== undefined && tx.subUserRate !== null && !isNaN(Number(tx.subUserRate)) ? Number(tx.subUserRate) : null,
       total_value: Number(tx.totalValue) || (Number(tx.bags) * (Number(tx.subUserRate) || Number(tx.rate))),
       agent: tx.agent || '',
-      mark: tx.mark || 'Spicelink',
+      mark: tx.mark || currentTenant.marks[0] || 'BRT',
       weight: tx.weight || '',
       rate_reason: tx.rateReason || '',
       locked_by: tx.lockedBy || '',
-      sub_url: tx.subUrl || currentTenant.subUrl,
+      sub_url: normalizeSubUrl(tx.subUrl || currentTenant.subUrl),
       sub_user_name: tx.subUserName || null,
       sub_user_timestamp: tx.subUserTimestamp || null,
       gross_weight: tx.grossWeight !== undefined && tx.grossWeight !== null ? Number(tx.grossWeight) : null,
@@ -641,10 +639,11 @@ export async function addTransaction(
   tx: Omit<Transaction, 'totalValue'>
 ): Promise<{ success: boolean; message: string; data?: Transaction }> {
   const tenant = getCurrentTenant();
+  const normalizedSubUrl = normalizeSubUrl(tenant.subUrl);
   const totalValue = tx.bags * tx.rate;
   const newTx: Transaction = {
     ...tx,
-    subUrl: tenant.subUrl,
+    subUrl: normalizedSubUrl,
     totalValue
   };
 
