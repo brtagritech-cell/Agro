@@ -462,6 +462,17 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     return () => clearInterval(timer);
   }, [isFormOpen]);
 
+  // Lock background scroll when any modal sheet is open on mobile
+  useEffect(() => {
+    if (isFormOpen || isReviewOpen || isMasterDataOpen) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prevOverflow;
+      };
+    }
+  }, [isFormOpen, isReviewOpen, isMasterDataOpen]);
+
   // Update transaction view for the selected calendar day
   useEffect(() => {
     const daily = transactions.filter(t => t.date === selectedDayString);
@@ -924,24 +935,24 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
       {/* Slide-Up Bottom Sheet Form Modal */}
       {isFormOpen && (
-        <div className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
           {/* Close tap overlay */}
           <div className="absolute inset-0" onClick={() => setIsFormOpen(false)} />
           
           {/* Bottom Sheet Container */}
-          <div className="w-full max-w-lg md:max-w-xl bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 animate-slide-up z-10 max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto overscroll-contain">
+          <div className="w-full max-w-lg md:max-w-xl bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 flex flex-col max-h-[92dvh] sm:max-h-[90vh] z-10 animate-slide-up overflow-hidden">
             {/* Mobile Sheet Drag Handle */}
-            <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mb-2 sm:hidden" />
+            <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
             
             {/* Header */}
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+            <div className="flex justify-between items-center border-b border-slate-100 px-4 py-3 sm:px-6 shrink-0">
               <div>
                 <h3 className="text-base sm:text-lg font-bold text-slate-800">Add New Entry</h3>
                 <p className="text-xs text-slate-500">Ledger transaction recording panel</p>
               </div>
               <button 
                 onClick={() => setIsFormOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all"
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -949,13 +960,15 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
             {/* Error alerts */}
             {formError && (
-              <div className="p-3 sm:p-3.5 bg-rose-50 text-rose-800 border border-rose-100 rounded-xl flex gap-2 text-xs font-medium">
+              <div className="mx-4 sm:mx-6 mt-3 p-3 sm:p-3.5 bg-rose-50 text-rose-800 border border-rose-100 rounded-xl flex gap-2 text-xs font-medium shrink-0">
                 <AlertTriangle className="h-4.5 w-4.5 text-rose-600 shrink-0 mt-0.5" />
                 <span>{formError}</span>
               </div>
             )}
 
-            <form onSubmit={handleFormSubmit} className="space-y-4">
+            <form onSubmit={handleFormSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              {/* Scrollable Form Body with Smooth Touch Pan */}
+              <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-4 touch-pan-y" style={{ WebkitOverflowScrolling: 'touch' }}>
               
               {/* Strict locked timestamp display */}
               <div className="bg-slate-50 border border-slate-200/50 p-3 sm:p-3.5 rounded-xl flex items-center justify-between gap-2">
@@ -1213,17 +1226,22 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   **Weight Restriction**: Sub-user is responsible for updating weight specifications. Entering physical weights is disabled under the Owner role scope.
                 </span>
               </div>
+            </div>
 
+            {/* Fixed / Prominent Action Footer - Always visible above mobile nav */}
+            <div className="p-3.5 sm:p-5 bg-white border-t border-slate-100 shrink-0 shadow-xs">
               <button
                 type="submit"
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl active:scale-[0.98] transition-all text-sm shadow-md"
+                className="w-full py-3 sm:py-3.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold rounded-xl active:scale-[0.98] transition-all text-sm shadow-md cursor-pointer flex items-center justify-center gap-2"
               >
-                Compile & Review Transaction
+                <Plus className="h-4 w-4" />
+                <span>Compile & Review Transaction</span>
               </button>
-            </form>
-          </div>
+            </div>
+          </form>
         </div>
-      )}
+      </div>
+    )}
 
       {/* Mandatory Transaction Review Modal */}
       {isReviewOpen && reviewData && (
@@ -1369,12 +1387,12 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
       {/* Branch Settings & Master Data Modal */}
       {isMasterDataOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
-          <div className="w-full max-w-lg md:max-w-xl lg:max-w-2xl bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 animate-slide-up max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto overscroll-contain">
+          <div className="w-full max-w-lg md:max-w-xl lg:max-w-2xl bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 flex flex-col max-h-[92dvh] sm:max-h-[90vh] overflow-hidden animate-slide-up">
             {/* Mobile Sheet Drag Handle */}
-            <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mb-2 sm:hidden" />
+            <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
             
             {/* Header */}
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+            <div className="flex justify-between items-center border-b border-slate-100 px-4 py-3 sm:px-6 shrink-0">
               <div>
                 <h3 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
                   <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
@@ -1388,14 +1406,14 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               </div>
               <button 
                 onClick={() => setIsMasterDataOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all"
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             {/* Modal Navigation Tabs */}
-            <div className="flex border-b border-slate-100 gap-1.5 overflow-x-auto pb-1 text-xs scrollbar-none">
+            <div className="flex border-b border-slate-100 gap-1.5 overflow-x-auto px-4 py-2 sm:px-6 text-xs scrollbar-none shrink-0 bg-slate-50/50">
               <button
                 type="button"
                 onClick={() => setModalTab('subusers')}
@@ -1446,7 +1464,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               </button>
             </div>
 
-            {/* Error & Success Alerts */}
+            {/* Scrollable Tab Body */}
+            <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-4 touch-pan-y" style={{ WebkitOverflowScrolling: 'touch' }}>
+              {/* Error & Success Alerts */}
             {masterError && (
               <div className="p-3 bg-rose-50 text-rose-800 border border-rose-200 rounded-xl text-xs font-semibold flex items-center gap-2 animate-fadeIn">
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
@@ -1789,9 +1809,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                 </div>
               </div>
             )}
+            </div>
 
-            {/* Modal Footer with Live Sync and Action Buttons */}
-            <div className="pt-3 border-t border-slate-100 space-y-2.5">
+            {/* Modal Footer with Live Sync and Action Buttons - Pinned at bottom */}
+            <div className="p-4 sm:p-6 pt-3 pb-safe border-t border-slate-100 space-y-2.5 bg-white shrink-0 shadow-xs">
               <div className="flex items-center justify-between text-[11px]">
                 <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
