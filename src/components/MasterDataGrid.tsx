@@ -9,9 +9,10 @@ import {
   Loader2,
   User,
   Users,
-  Scale
+  Scale,
+  Printer
 } from 'lucide-react';
-import { type Transaction } from '../services/sheetService';
+import { type Transaction, getCurrentTenant } from '../services/sheetService';
 import { ViewWeightDetailsModal } from './ViewWeightDetailsModal';
 
 const getTodayISTString = (): string => {
@@ -59,6 +60,17 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
   
   // Reusable weight details view state
   const [viewingTx, setViewingTx] = useState<Transaction | null>(null);
+  const [autoPrintSlip, setAutoPrintSlip] = useState(false);
+  const [isPrintingLedger, setIsPrintingLedger] = useState(false);
+  const currentTenant = getCurrentTenant();
+
+  const handlePrintLedger = () => {
+    setIsPrintingLedger(true);
+    setTimeout(() => {
+      window.print();
+      setIsPrintingLedger(false);
+    }, 150);
+  };
 
   // Dynamic available marks from current transactions
   const availableMarks = useMemo(() => {
@@ -422,6 +434,17 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
           )}
         </div>
 
+        {/* Print Master Ledger Button */}
+        <button
+          type="button"
+          onClick={handlePrintLedger}
+          className="flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/90 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-2xs cursor-pointer shrink-0"
+          title="Print Filtered Master Ledger Report"
+        >
+          <Printer className="h-4 w-4 text-indigo-600" />
+          <span>Print Ledger</span>
+        </button>
+
           {/* Clear Filters Button */}
           {(searchTerm || selectedMark || selectedSubUser !== 'all' || startDate || endDate) && (
             <button
@@ -601,14 +624,31 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
 
                 {/* Card Total Value Footer */}
                 <div className="border-t border-slate-100 pt-3 flex justify-between items-center pl-1 sm:pl-2">
-                  <button
-                    type="button"
-                    onClick={() => setViewingTx(tx)}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer"
-                  >
-                    <Scale className="h-3.5 w-3.5" />
-                    <span>View Details</span>
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewingTx(tx);
+                        setAutoPrintSlip(false);
+                      }}
+                      className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                    >
+                      <Scale className="h-3.5 w-3.5" />
+                      <span>View Details</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewingTx(tx);
+                        setAutoPrintSlip(true);
+                      }}
+                      className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/90 font-bold text-xs rounded-xl transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
+                      title="Print Weight Slip"
+                    >
+                      <Printer className="h-3.5 w-3.5 text-indigo-600" />
+                      <span>Print</span>
+                    </button>
+                  </div>
                   <div className="text-right">
                     <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Total Value</span>
                     <span className="text-sm sm:text-base font-bold font-mono text-emerald-700">{formatINR(tx.totalValue)}</span>
@@ -699,14 +739,32 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                       </td>
 
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => setViewingTx(tx)}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1 mx-auto"
-                        >
-                          <Scale className="h-3.5 w-3.5" />
-                          <span>View Details</span>
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setViewingTx(tx);
+                              setAutoPrintSlip(false);
+                            }}
+                            className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1"
+                            title="View Recorded Bag Weights & Calculations"
+                          >
+                            <Scale className="h-3.5 w-3.5" />
+                            <span>View Details</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setViewingTx(tx);
+                              setAutoPrintSlip(true);
+                            }}
+                            className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/90 font-bold text-xs rounded-xl transition-all shadow-2xs cursor-pointer flex items-center gap-1"
+                            title="Print Weight Ledger Slip"
+                          >
+                            <Printer className="h-3.5 w-3.5 text-indigo-600" />
+                            <span>Print</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -717,13 +775,127 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
         </>
       )}
 
+      {/* Printable Master Ledger Report (DOM for printer) */}
+      {isPrintingLedger && (
+        <>
+          <style>{`
+            @media print {
+              body * {
+                visibility: hidden !important;
+              }
+              #printable-master-ledger, #printable-master-ledger * {
+                visibility: visible !important;
+              }
+              #printable-master-ledger {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                display: block !important;
+                padding: 20px !important;
+                background: white !important;
+                color: black !important;
+              }
+              .no-print {
+                display: none !important;
+              }
+            }
+          `}</style>
+          <div id="printable-master-ledger" className="hidden">
+            <div style={{ borderBottom: '2px solid black', paddingBottom: '12px', marginBottom: '14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <h1 style={{ fontSize: '22px', fontWeight: '900', margin: 0, letterSpacing: '-0.5px' }}>AgroSync</h1>
+                  <p style={{ fontSize: '12px', margin: '4px 0 0', color: '#555' }}>Master Ledger Report • Branch: {currentTenant?.subUrl || 'Head Branch'}</p>
+                </div>
+                <div style={{ textAlign: 'right', fontSize: '12px' }}>
+                  <h2 style={{ fontSize: '15px', fontWeight: 'bold', margin: 0 }}>MASTER LEDGER</h2>
+                  <p style={{ margin: '4px 0 0', fontFamily: 'monospace' }}>Date: {getTodayISTString()}</p>
+                  {(startDate || endDate) && (
+                    <p style={{ fontSize: '11px', margin: '2px 0 0', color: '#444' }}>
+                      Date Range: {startDate && endDate ? `${startDate} to ${endDate}` : startDate ? `From ${startDate}` : `Until ${endDate}`}
+                    </p>
+                  )}
+                  {selectedSubUser !== 'all' && (
+                    <p style={{ fontSize: '11px', margin: '2px 0 0', color: '#444' }}>
+                      Sub-User: {selectedSubUser === '__pending__' ? 'Pending Assignment' : selectedSubUser}
+                    </p>
+                  )}
+                  {selectedMark && (
+                    <p style={{ fontSize: '11px', margin: '2px 0 0', color: '#444' }}>
+                      Mark: {selectedMark}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', border: '1px solid #ccc', borderRadius: '8px', padding: '10px', marginBottom: '14px', fontSize: '12px' }}>
+              <div>Total Transactions: <strong>{totalTransactions}</strong></div>
+              <div>Total Bags Handled: <strong style={{ fontFamily: 'monospace' }}>{totalBags.toLocaleString()} Bags</strong></div>
+              <div>Consolidated Value: <strong style={{ fontFamily: 'monospace', color: '#047857' }}>{formatINR(consolidatedValue)}</strong></div>
+            </div>
+
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10.5px', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid black', backgroundColor: '#f8fafc' }}>
+                  <th style={{ padding: '6px 4px' }}>Transaction ID</th>
+                  <th style={{ padding: '6px 4px' }}>Date</th>
+                  <th style={{ padding: '6px 4px', textAlign: 'center' }}>Lot</th>
+                  <th style={{ padding: '6px 4px' }}>Agent</th>
+                  <th style={{ padding: '6px 4px', textAlign: 'center' }}>Mark</th>
+                  <th style={{ padding: '6px 4px', textAlign: 'right' }}>Bags</th>
+                  <th style={{ padding: '6px 4px', textAlign: 'right' }}>Owner Rate</th>
+                  <th style={{ padding: '6px 4px' }}>Sub-User</th>
+                  <th style={{ padding: '6px 4px', textAlign: 'right' }}>Sub-User Rate</th>
+                  <th style={{ padding: '6px 4px', textAlign: 'center' }}>Weight</th>
+                  <th style={{ padding: '6px 4px', textAlign: 'right' }}>Total Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTransactions.map((tx) => (
+                  <tr key={`print-tx-${tx.transactionId}`} style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '5px 4px', fontFamily: 'monospace' }}>{tx.transactionId}</td>
+                    <td style={{ padding: '5px 4px', fontFamily: 'monospace' }}>{tx.date}</td>
+                    <td style={{ padding: '5px 4px', textAlign: 'center', fontFamily: 'monospace', fontWeight: 'bold' }}>#{tx.lot}</td>
+                    <td style={{ padding: '5px 4px', fontWeight: '600' }}>{tx.agent}</td>
+                    <td style={{ padding: '5px 4px', textAlign: 'center', fontWeight: 'bold' }}>{tx.mark}</td>
+                    <td style={{ padding: '5px 4px', textAlign: 'right', fontFamily: 'monospace' }}>{tx.bags}</td>
+                    <td style={{ padding: '5px 4px', textAlign: 'right', fontFamily: 'monospace' }}>{formatINR(tx.rate)}</td>
+                    <td style={{ padding: '5px 4px', fontWeight: '600' }}>{tx.subUserName || 'Pending'}</td>
+                    <td style={{ padding: '5px 4px', textAlign: 'right', fontFamily: 'monospace' }}>
+                      {tx.subUserRate ? formatINR(tx.subUserRate) : '-'}
+                    </td>
+                    <td style={{ padding: '5px 4px', textAlign: 'center', fontFamily: 'monospace' }}>
+                      {tx.weight ? tx.weight.split('[')[0].trim() : 'Pending'}
+                    </td>
+                    <td style={{ padding: '5px 4px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold', color: '#047857' }}>
+                      {formatINR(tx.totalValue)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div style={{ borderTop: '1px solid #ccc', paddingTop: '8px', marginTop: '14px', fontSize: '10px', color: '#666', display: 'flex', justifyContent: 'space-between' }}>
+              <span>AgroSync Verified Ledger Record</span>
+              <span>Printed on: {new Date().toLocaleString()}</span>
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Read-Only weight optimization detailed view modal */}
       {viewingTx && (
         <ViewWeightDetailsModal
           transaction={viewingTx}
-          onClose={() => setViewingTx(null)}
+          onClose={() => {
+            setViewingTx(null);
+            setAutoPrintSlip(false);
+          }}
           onUpdate={onRefresh}
           allowPrint={true}
+          autoPrint={autoPrintSlip}
           dateRange={
             startDate && endDate
               ? `${startDate} to ${endDate}`

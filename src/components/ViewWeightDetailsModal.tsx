@@ -9,13 +9,15 @@ interface ViewWeightDetailsModalProps {
   onUpdate?: () => void;
   dateRange?: string;
   allowPrint?: boolean;
+  autoPrint?: boolean;
 }
 
 export const ViewWeightDetailsModal: React.FC<ViewWeightDetailsModalProps> = ({
   transaction,
   onClose,
   dateRange,
-  allowPrint = false
+  allowPrint = false,
+  autoPrint = false
 }) => {
   const currentTenant = getCurrentTenant();
   const bagCost = currentTenant?.bagCost ?? 25;
@@ -24,6 +26,15 @@ export const ViewWeightDetailsModal: React.FC<ViewWeightDetailsModalProps> = ({
   const handlePrint = () => {
     window.print();
   };
+
+  React.useEffect(() => {
+    if (autoPrint && allowPrint) {
+      const timer = setTimeout(() => {
+        window.print();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [autoPrint, allowPrint]);
 
   // Helper to parse weights: "150.600 kg [50.200, 50.100, 50.300]" -> ["50.200", "50.100", "50.300"]
   const parseBagWeights = (weightStr: string): string[] => {
