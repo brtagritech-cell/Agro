@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Search, 
   Filter, 
@@ -6,7 +6,10 @@ import {
   IndianRupee, 
   Layers, 
   Hash, 
-  Loader2
+  Loader2,
+  User,
+  Users,
+  Scale
 } from 'lucide-react';
 import { type Transaction } from '../services/sheetService';
 import { ViewWeightDetailsModal } from './ViewWeightDetailsModal';
@@ -45,6 +48,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMark, setSelectedMark] = useState('');
+  const [selectedSubUser, setSelectedSubUser] = useState<string>('all');
   const [mobileView, setMobileView] = useState<'cards' | 'table'>('cards');
   
   // Date Range state
@@ -55,6 +59,39 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
   
   // Reusable weight details view state
   const [viewingTx, setViewingTx] = useState<Transaction | null>(null);
+
+  // Dynamic available marks from current transactions
+  const availableMarks = useMemo(() => {
+    const set = new Set<string>();
+    transactions.forEach(tx => {
+      if (tx.mark && tx.mark.trim()) set.add(tx.mark.trim());
+    });
+    if (set.size === 0) {
+      ['Agro', 'BRT', 'RS', 'TS', 'DV', 'BVB'].forEach(m => set.add(m));
+    }
+    return Array.from(set).sort();
+  }, [transactions]);
+
+  // Dynamic Sub-Users list and lot count statistics
+  const subUserStats = useMemo(() => {
+    const map = new Map<string, number>();
+    let pendingCount = 0;
+
+    transactions.forEach(tx => {
+      const name = tx.subUserName?.trim();
+      if (name) {
+        map.set(name, (map.get(name) || 0) + 1);
+      } else {
+        pendingCount++;
+      }
+    });
+
+    const list = Array.from(map.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+
+    return { list, pendingCount };
+  }, [transactions]);
 
   // Currency Formatter for INR
   const formatINR = (value: number | undefined | null) => {
@@ -71,14 +108,22 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
     const matchesSearch = 
       tx.agent.toLowerCase().includes(searchTerm.toLowerCase()) ||
       tx.transactionId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tx.lot.toLowerCase().includes(searchTerm.toLowerCase());
+      tx.lot.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (tx.subUserName && tx.subUserName.toLowerCase().includes(searchTerm.toLowerCase()));
       
     const matchesMark = selectedMark === '' || tx.mark === selectedMark;
     const matchesDate = 
       (!startDate || tx.date >= startDate) && 
       (!endDate || tx.date <= endDate);
     
-    return matchesSearch && matchesMark && matchesDate;
+    const matchesSubUser = 
+      selectedSubUser === 'all'
+        ? true
+        : selectedSubUser === '__pending__'
+          ? (!tx.subUserName || !tx.subUserName.trim())
+          : (tx.subUserName && tx.subUserName.toLowerCase() === selectedSubUser.toLowerCase());
+    
+    return matchesSearch && matchesMark && matchesDate && matchesSubUser;
   });
 
   // Calculate Metrics
@@ -178,40 +223,37 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
       </div>
 
       {/* Sticky Filter Panel */}
-      <div className="sticky top-14 sm:top-16 z-20 bg-white p-3 sm:p-4 rounded-2xl shadow-soft border border-slate-100/80 backdrop-blur-md flex flex-col md:flex-row gap-2.5 sm:gap-3">
-        {/* Search Input */}
-        <div className="relative flex-grow">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search by Agent Name, Lot, or Transaction ID..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 sm:py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 text-sm font-medium"
-          />
-        </div>
-        
-        {/* Mark Select Dropdown */}
-        <div className="relative w-full md:w-48">
-          <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <select
-            value={selectedMark}
-            onChange={(e) => setSelectedMark(e.target.value)}
-            className="w-full pl-10 pr-8 py-2 sm:py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 text-sm font-medium appearance-none cursor-pointer"
-          >
-            <option value="">All Marks</option>
-            <option value="Spicelink">Spicelink</option>
-            <option value="Agro">Agro</option>
-            <option value="BRT">BRT</option>
-            <option value="RS">RS</option>
-            <option value="TS">TS</option>
-            <option value="DV">DV</option>
-            <option value="BVB">BVB</option>
-          </select>
-          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-500">
-            <svg className="fill-current h-4 w-4" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+      <div className="sticky top-14 sm:top-16 z-20 bg-white p-3 sm:p-4 rounded-2xl shadow-soft border border-slate-100/80 backdrop-blur-md space-y-3">
+        <div className="flex flex-col md:flex-row gap-2.5 sm:gap-3">
+          {/* Search Input */}
+          <div className="relative flex-grow">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search by Agent Name, Lot, Sub-User, or ID..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 sm:py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 text-sm font-medium"
+            />
           </div>
-        </div>
+          
+          {/* Mark Select Dropdown */}
+          <div className="relative w-full md:w-48">
+            <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <select
+              value={selectedMark}
+              onChange={(e) => setSelectedMark(e.target.value)}
+              className="w-full pl-10 pr-8 py-2 sm:py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 text-sm font-medium appearance-none cursor-pointer"
+            >
+              <option value="">All Marks</option>
+              {availableMarks.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-500">
+              <svg className="fill-current h-4 w-4" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+            </div>
+          </div>
 
         {/* Date Range Picker Dropdown */}
         <div className="relative w-full md:w-60">
@@ -380,20 +422,86 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
           )}
         </div>
 
-        {/* Clear Filters Button */}
-        {(searchTerm || selectedMark || startDate || endDate) && (
+          {/* Clear Filters Button */}
+          {(searchTerm || selectedMark || selectedSubUser !== 'all' || startDate || endDate) && (
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setSelectedMark('');
+                setSelectedSubUser('all');
+                setStartDate('');
+                setEndDate('');
+              }}
+              className="px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer whitespace-nowrap self-center"
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
+
+        {/* Sub-User Fast Filter Chips */}
+        <div className="flex items-center gap-2 overflow-x-auto pt-2 pb-0.5 no-scrollbar border-t border-slate-100">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1.5 pl-0.5">
+            <Users className="h-3.5 w-3.5 text-indigo-600" />
+            Sub-User:
+          </span>
           <button
-            onClick={() => {
-              setSearchTerm('');
-              setSelectedMark('');
-              setStartDate('');
-              setEndDate('');
-            }}
-            className="px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+            type="button"
+            onClick={() => setSelectedSubUser('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+              selectedSubUser === 'all'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/80 shadow-2xs'
+            }`}
           >
-            Clear Filters
+            <span>All Sub-Users</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              selectedSubUser === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-700'
+            }`}>
+              {transactions.length}
+            </span>
           </button>
-        )}
+
+          {subUserStats.list.map(u => (
+            <button
+              key={u.name}
+              type="button"
+              onClick={() => setSelectedSubUser(u.name)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                selectedSubUser.toLowerCase() === u.name.toLowerCase()
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-indigo-50/60 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/80 shadow-2xs'
+              }`}
+            >
+              <User className="h-3.5 w-3.5" />
+              <span>{u.name}</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                selectedSubUser.toLowerCase() === u.name.toLowerCase() ? 'bg-indigo-800 text-white' : 'bg-indigo-200 text-indigo-900'
+              }`}>
+                {u.count} {u.count === 1 ? 'lot' : 'lots'}
+              </span>
+            </button>
+          ))}
+
+          {subUserStats.pendingCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedSubUser('__pending__')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                selectedSubUser === '__pending__'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/80 shadow-2xs'
+              }`}
+            >
+              <span>Pending Assignment</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                selectedSubUser === '__pending__' ? 'bg-amber-800 text-white' : 'bg-amber-200 text-amber-900'
+              }`}>
+                {subUserStats.pendingCount}
+              </span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Grid Display (Mobile Cards / Desktop Table) */}
@@ -417,8 +525,8 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                 
                 <div className="flex justify-between items-start gap-2 pl-1 sm:pl-2">
                   <div className="min-w-0">
-                    <span className="text-[10px] font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-semibold">
-                      LOT {tx.lot}
+                    <span className="text-[10px] font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-bold">
+                      LOT #{tx.lot}
                     </span>
                     <h3 className="font-mono text-xs sm:text-sm font-bold text-slate-800 mt-1 select-all break-all">
                       {tx.transactionId}
@@ -429,11 +537,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1 pl-1 sm:pl-2">
-                  <div>
-                    <span className="text-slate-400 block uppercase tracking-wider font-semibold text-[10px]">Agent</span>
-                    <span className="text-slate-800 font-semibold break-words">{tx.agent}</span>
-                  </div>
+                <div className="grid grid-cols-2 gap-2 text-xs pt-1 pl-1 sm:pl-2">
                   <div>
                     <span className="text-slate-400 block uppercase tracking-wider font-semibold text-[10px]">Date</span>
                     <span className="text-slate-800 font-medium font-mono">{tx.date}</span>
@@ -444,22 +548,54 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                       {tx.bags} Bags @ {formatINR(tx.rate)}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block uppercase tracking-wider font-semibold text-[10px]">Sub-User Rate</span>
-                    <span className="text-slate-800 font-semibold font-mono">
-                      {tx.subUserRate !== undefined && tx.subUserRate !== null && tx.subUserRate > 0 
-                        ? formatINR(tx.subUserRate) 
-                        : <span className="text-slate-400 font-sans italic text-xs">Pending</span>
-                      }
+                </div>
+
+                {/* Sub-User Details Separately Card Section */}
+                <div className="bg-gradient-to-br from-indigo-50/70 to-slate-50 border border-indigo-100/90 rounded-xl p-3 space-y-2 mt-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-indigo-900 border-b border-indigo-100 pb-1.5">
+                    <span className="flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5 text-indigo-600" />
+                      Sub-User Operations
+                    </span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${
+                      tx.subUserName ? 'bg-indigo-600 text-white' : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {tx.subUserName ? `Logged by: ${tx.subUserName}` : 'Pending Sub-User'}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block uppercase tracking-wider font-semibold text-[10px]">Weight Status</span>
-                    {tx.weight ? (
-                      <span className="text-emerald-700 font-semibold font-mono">{tx.weight.split('[')[0].trim()}</span>
-                    ) : (
-                      <span className="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md font-semibold font-mono text-[11px]">Pending</span>
-                    )}
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <span className="text-[9px] text-slate-400 font-bold uppercase block">Lot</span>
+                      <span className="font-mono font-bold text-slate-800">Lot {tx.lot}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 font-bold uppercase block">Agent</span>
+                      <span className="font-semibold text-slate-800 truncate block">{tx.agent}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 font-bold uppercase block">Mark</span>
+                      <span className="font-bold text-emerald-800 bg-white px-1.5 py-0.5 rounded border border-emerald-200 inline-block text-[10px]">{tx.mark}</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1.5 border-t border-indigo-100/60">
+                    <div>
+                      <span className="text-[9px] text-slate-400 font-bold uppercase block">Sub-User Rate</span>
+                      <span className="font-mono font-bold text-slate-800">
+                        {tx.subUserRate !== undefined && tx.subUserRate !== null && tx.subUserRate > 0 
+                          ? formatINR(tx.subUserRate) 
+                          : <span className="text-slate-400 italic font-sans text-xs">Pending</span>
+                        }
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 font-bold uppercase block">Logged Weight</span>
+                      <span className="font-mono font-bold text-slate-800">
+                        {tx.weight 
+                          ? tx.weight.split('[')[0].trim() 
+                          : <span className="text-amber-600 font-sans italic text-xs">Pending</span>
+                        }
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -468,9 +604,10 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                   <button
                     type="button"
                     onClick={() => setViewingTx(tx)}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm"
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer"
                   >
-                    View Details
+                    <Scale className="h-3.5 w-3.5" />
+                    <span>View Details</span>
                   </button>
                   <div className="text-right">
                     <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Total Value</span>
@@ -487,54 +624,88 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
               <table className="w-full border-collapse text-left">
                 <thead className="bg-slate-50 text-[11px] xl:text-xs font-semibold text-slate-500 uppercase tracking-wider sticky top-0 z-1 whitespace-nowrap">
                   <tr>
-                    <th className="py-3.5 px-4 xl:py-4 xl:px-5 border-b border-slate-100">Transaction ID</th>
-                    <th className="py-3.5 px-3 xl:py-4 xl:px-4 border-b border-slate-100">Date</th>
-                    <th className="py-3.5 px-3 xl:py-4 xl:px-4 border-b border-slate-100 text-center">Lot</th>
-                    <th className="py-3.5 px-3 xl:py-4 xl:px-4 border-b border-slate-100">Agent</th>
-                    <th className="py-3.5 px-3 xl:py-4 xl:px-4 border-b border-slate-100 text-center">Mark</th>
-                    <th className="py-3.5 px-3 xl:py-4 xl:px-4 border-b border-slate-100 text-right">Bags</th>
-                    <th className="py-3.5 px-3 xl:py-4 xl:px-4 border-b border-slate-100 text-right">Owner Rate</th>
-                    <th className="py-3.5 px-3 xl:py-4 xl:px-4 border-b border-slate-100 text-right">Sub-User Rate</th>
-                    <th className="py-3.5 px-3 xl:py-4 xl:px-4 border-b border-slate-100 text-right">Total Value</th>
-                    <th className="py-3.5 px-3 xl:py-4 xl:px-4 border-b border-slate-100 text-center">Weight</th>
-                    <th className="py-3.5 px-4 xl:py-4 xl:px-5 border-b border-slate-100 text-center">Actions</th>
+                    <th className="py-3.5 px-3 border-b border-slate-100">Transaction ID</th>
+                    <th className="py-3.5 px-3 border-b border-slate-100">Date</th>
+                    <th className="py-3.5 px-3 border-b border-slate-100 text-right">Bags</th>
+                    <th className="py-3.5 px-3 border-b border-slate-100 text-right">Owner Rate</th>
+                    <th className="py-3.5 px-3 border-b border-slate-100 text-right">Total Value</th>
+                    
+                    {/* Dedicated Sub-User Details Separately Columns */}
+                    <th className="py-3.5 px-3.5 border-b border-indigo-200 bg-indigo-50/80 text-indigo-950 font-bold">
+                      <span className="flex items-center gap-1">
+                        <User className="h-3.5 w-3.5 text-indigo-600" />
+                        Sub-User (Logged By)
+                      </span>
+                    </th>
+                    <th className="py-3.5 px-3 border-b border-indigo-200 bg-indigo-50/80 text-indigo-950 text-center font-bold">Sub-User Lot</th>
+                    <th className="py-3.5 px-3 border-b border-indigo-200 bg-indigo-50/80 text-indigo-950 font-bold">Sub-User Agent</th>
+                    <th className="py-3.5 px-3 border-b border-indigo-200 bg-indigo-50/80 text-indigo-950 text-center font-bold">Sub-User Mark</th>
+                    <th className="py-3.5 px-3 border-b border-indigo-200 bg-indigo-50/80 text-indigo-950 text-right font-bold">Sub-User Rate</th>
+                    <th className="py-3.5 px-3 border-b border-indigo-200 bg-indigo-50/80 text-indigo-950 text-center font-bold">Weight Status</th>
+
+                    <th className="py-3.5 px-4 border-b border-slate-100 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs xl:text-sm font-medium text-slate-700">
                   {filteredTransactions.map((tx) => (
-                    <tr key={tx.transactionId} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-3.5 px-4 xl:py-4 xl:px-5 font-mono text-slate-800 select-all whitespace-nowrap">{tx.transactionId}</td>
-                      <td className="py-3.5 px-3 xl:py-4 xl:px-4 font-mono text-slate-500 whitespace-nowrap">{tx.date}</td>
-                      <td className="py-3.5 px-3 xl:py-4 xl:px-4 font-mono text-slate-500 text-center whitespace-nowrap">{tx.lot}</td>
-                      <td className="py-3.5 px-3 xl:py-4 xl:px-4 text-slate-900 whitespace-nowrap">{tx.agent}</td>
-                      <td className="py-3.5 px-3 xl:py-4 xl:px-4 text-center whitespace-nowrap">
-                        <span className="inline-block text-[11px] font-bold uppercase px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded border border-emerald-100">
+                    <tr key={tx.transactionId} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="py-3.5 px-3 font-mono text-slate-800 select-all whitespace-nowrap">{tx.transactionId}</td>
+                      <td className="py-3.5 px-3 font-mono text-slate-500 whitespace-nowrap">{tx.date}</td>
+                      <td className="py-3.5 px-3 text-right font-mono text-slate-900 whitespace-nowrap">{tx.bags.toLocaleString()}</td>
+                      <td className="py-3.5 px-3 text-right font-mono text-slate-600 whitespace-nowrap">{formatINR(tx.rate)}</td>
+                      <td className="py-3.5 px-3 text-right font-mono text-emerald-700 font-bold whitespace-nowrap">{formatINR(tx.totalValue)}</td>
+
+                      {/* Sub-User Details Columns */}
+                      <td className="py-3.5 px-3.5 bg-indigo-50/20 whitespace-nowrap">
+                        {tx.subUserName ? (
+                          <span className="inline-flex items-center gap-1.5 font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg text-xs">
+                            <User className="h-3 w-3 text-indigo-600" />
+                            {tx.subUserName}
+                          </span>
+                        ) : (
+                          <span className="text-amber-700 bg-amber-50 border border-amber-200/70 px-2 py-0.5 rounded text-[11px] font-semibold">
+                            Pending
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-3 bg-indigo-50/20 text-center font-mono font-bold text-slate-800 whitespace-nowrap">
+                        <span className="bg-slate-100 px-2 py-0.5 rounded text-xs">Lot {tx.lot}</span>
+                      </td>
+                      <td className="py-3.5 px-3 bg-indigo-50/20 text-slate-900 font-semibold whitespace-nowrap">
+                        {tx.agent}
+                      </td>
+                      <td className="py-3.5 px-3 bg-indigo-50/20 text-center whitespace-nowrap">
+                        <span className="inline-block text-[11px] font-bold uppercase px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded border border-emerald-200">
                           {tx.mark}
                         </span>
                       </td>
-                      <td className="py-3.5 px-3 xl:py-4 xl:px-4 text-right font-mono text-slate-900 whitespace-nowrap">{tx.bags.toLocaleString()}</td>
-                      <td className="py-3.5 px-3 xl:py-4 xl:px-4 text-right font-mono text-slate-600 whitespace-nowrap">{formatINR(tx.rate)}</td>
-                      <td className="py-3.5 px-3 xl:py-4 xl:px-4 text-right font-mono text-slate-600 whitespace-nowrap">
-                        {tx.subUserRate !== undefined && tx.subUserRate !== null && tx.subUserRate > 0 
-                          ? formatINR(tx.subUserRate) 
-                          : <span className="text-slate-400 font-sans italic text-xs">Pending</span>
-                        }
-                      </td>
-                      <td className="py-3.5 px-3 xl:py-4 xl:px-4 text-right font-mono text-emerald-700 font-bold whitespace-nowrap">{formatINR(tx.totalValue)}</td>
-                      <td className="py-3.5 px-3 xl:py-4 xl:px-4 text-center whitespace-nowrap">
-                        {tx.weight ? (
-                          <span className="font-mono text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-xs">{tx.weight.split('[')[0].trim()}</span>
+                      <td className="py-3.5 px-3 bg-indigo-50/20 text-right font-mono whitespace-nowrap">
+                        {tx.subUserRate !== undefined && tx.subUserRate !== null && tx.subUserRate > 0 ? (
+                          <span className="font-bold text-slate-800">{formatINR(tx.subUserRate)}</span>
                         ) : (
-                          <span className="text-[11px] font-bold font-mono text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">Pending</span>
+                          <span className="text-slate-400 font-sans italic text-xs">Pending</span>
                         )}
                       </td>
-                      <td className="py-3.5 px-4 xl:py-4 xl:px-5 text-center whitespace-nowrap">
+                      <td className="py-3.5 px-3 bg-indigo-50/20 text-center whitespace-nowrap">
+                        {tx.weight ? (
+                          <span className="font-mono text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-xs font-bold">
+                            {tx.weight.split('[')[0].trim()}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-bold font-mono text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
+                            Pending
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => setViewingTx(tx)}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm"
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1 mx-auto"
                         >
-                          View Details
+                          <Scale className="h-3.5 w-3.5" />
+                          <span>View Details</span>
                         </button>
                       </td>
                     </tr>
@@ -546,14 +717,21 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
         </>
       )}
 
-      {/* Settings Modal (Google Sheet URL Sync Setup) Removed - Configured in Admin Portal */}
-
       {/* Read-Only weight optimization detailed view modal */}
       {viewingTx && (
         <ViewWeightDetailsModal
           transaction={viewingTx}
           onClose={() => setViewingTx(null)}
           onUpdate={onRefresh}
+          dateRange={
+            startDate && endDate
+              ? `${startDate} to ${endDate}`
+              : startDate
+                ? `From ${startDate}`
+                : endDate
+                  ? `Until ${endDate}`
+                  : undefined
+          }
         />
       )}
 
