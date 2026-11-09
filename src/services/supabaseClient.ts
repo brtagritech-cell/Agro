@@ -4,8 +4,8 @@ export const SUPABASE_STORAGE_URL_KEY = 'agrosync_supabase_url';
 export const SUPABASE_STORAGE_KEY_KEY = 'agrosync_supabase_anon_key';
 
 // Default Supabase project credentials for AgroSync
-export const DEFAULT_SUPABASE_URL = 'https://msbhppvwxdxfbassfsry.supabase.co';
-export const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_f6628KvU2-5eA8M5J_JC5A_4c1wcCuk';
+export const DEFAULT_SUPABASE_URL = '';
+export const DEFAULT_SUPABASE_ANON_KEY = '';
 
 export function getSupabaseCredentials(): { url: string; anonKey: string; isCustom: boolean } {
   const storedUrl = (localStorage.getItem(SUPABASE_STORAGE_URL_KEY) || '').trim();
