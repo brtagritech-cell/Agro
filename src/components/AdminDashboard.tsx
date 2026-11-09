@@ -56,6 +56,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
   const [deleteFeedback, setDeleteFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Form fields
+  const [companyName, setCompanyName] = useState('');
   const [subUrl, setSubUrl] = useState('');
   const [ownerId, setOwnerId] = useState('');
   const [ownerPassword, setOwnerPassword] = useState('');
@@ -110,6 +111,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
   const openCreateModal = () => {
     setFormType('create');
     setEditingTenant(null);
+    setCompanyName('');
     setSubUrl('');
     setOwnerId('');
     setOwnerPassword('1234');
@@ -135,6 +137,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
   const openEditModal = (tenant: TenantConfig) => {
     setFormType('edit');
     setEditingTenant(tenant);
+    setCompanyName(tenant.companyName || '');
     setSubUrl(tenant.subUrl);
     setOwnerId(tenant.ownerId);
     setOwnerPassword(tenant.ownerPassword);
@@ -309,6 +312,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
 
     const newTenant: TenantConfig = {
       subUrl: normalizedPath,
+      companyName: companyName.trim(),
       sheetUrl: '', // No longer used under Supabase
       ownerId: ownerId.trim(),
       ownerPassword: ownerPassword.trim(),
@@ -375,12 +379,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
 
           if (columns.length < 5) continue;
 
-          const rawSubUrl = columns[0].replace(/"/g, '');
-          const ownerId = columns[1].replace(/"/g, '');
-          const ownerPassword = columns[2].replace(/"/g, '');
-          const rawSubUsers = columns[3];
-          const rawMarks = columns[4];
-          const rawAgents = columns[5] || "";
+          const hasCompanyCol = columns.length >= 7;
+          const compName = hasCompanyCol ? columns[0].replace(/"/g, '').trim() : '';
+          const rawSubUrl = (hasCompanyCol ? columns[1] : columns[0]).replace(/"/g, '');
+          const ownerId = (hasCompanyCol ? columns[2] : columns[1]).replace(/"/g, '');
+          const ownerPassword = (hasCompanyCol ? columns[3] : columns[2]).replace(/"/g, '');
+          const rawSubUsers = hasCompanyCol ? columns[4] : columns[3];
+          const rawMarks = hasCompanyCol ? columns[5] : columns[4];
+          const rawAgents = (hasCompanyCol ? columns[6] : columns[5]) || "";
 
           const normalizedPath = normalizeSubUrl(rawSubUrl);
           if (!normalizedPath || normalizedPath === '/' || normalizedPath === '/admin/') continue;
@@ -416,6 +422,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
 
           newTenants.push({
             subUrl: normalizedPath,
+            companyName: compName,
             sheetUrl: '', // No longer used under Supabase
             ownerId: ownerId,
             ownerPassword: ownerPassword,
@@ -454,8 +461,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
   };
 
   const downloadCSVTemplate = () => {
-    const headers = 'Sub-URL Path,Owner ID,Owner Password,Sub-Users,Brand Marks,Agent Names\n';
-    const sample = '"/Agro/TestBranch/","owner_id","owner_pass","Ramesh:1234, Suresh:1234","Agro, BRT, RS","Agent A, Agent B"\n';
+    const headers = 'Company Name,Sub-URL Path,Owner ID,Owner Password,Sub-Users,Brand Marks,Agent Names\n';
+    const sample = '"Agro Logistics","/Agro/TestBranch/","owner_id","owner_pass","Ramesh:1234, Suresh:1234","Agro, BRT, RS","Agent A, Agent B"\n';
     const blob = new Blob([headers + sample], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -734,9 +741,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
               <div className="space-y-3 pl-1 sm:pl-2">
                 <div className="flex justify-between items-start gap-2">
                   <div className="min-w-0">
-                    <span className="text-[10px] font-bold font-mono px-2 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-800 rounded">
-                      SUB ROUTE
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] font-bold font-mono px-2 py-0.5 bg-indigo-50 border border-indigo-100 text-indigo-800 rounded">
+                        SUB ROUTE
+                      </span>
+                      {t.companyName && (
+                        <span className="text-[10px] font-bold font-sans px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md">
+                          {t.companyName}
+                        </span>
+                      )}
+                    </div>
                     <h3 className="text-base sm:text-lg font-bold font-mono text-slate-800 mt-1 break-all">{t.subUrl}</h3>
                   </div>
                   <div className="flex gap-1 shrink-0">
@@ -791,11 +805,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
               <div className="pl-1 sm:pl-2 border-t border-slate-100 pt-3 sm:pt-4 space-y-2 sm:space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Client Entry Links</span>
+                  {t.companyName && (
+                    <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded truncate max-w-[180px]">
+                      {t.companyName}
+                    </span>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 gap-2.5">
                   {/* Shareable Link */}
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-[10px]">
-                    <span className="font-bold text-slate-500 uppercase tracking-wider block text-[9px]">Shareable Link (Clean & Simple)</span>
+                    <div className="flex justify-between items-center mb-0.5">
+                      <span className="font-bold text-slate-500 uppercase tracking-wider block text-[9px]">Shareable Link (Clean & Simple)</span>
+                      {t.companyName && (
+                        <span className="text-[10px] font-extrabold text-emerald-800">{t.companyName}</span>
+                      )}
+                    </div>
                     <a 
                       href={`${window.location.origin}${window.location.pathname}#${t.subUrl}`} 
                       target="_blank" 
@@ -843,6 +867,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
             )}
 
             <form onSubmit={handleSaveTenant} className="space-y-4">
+              {/* Company Name */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Company Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. BRT Spices, AgroSync Logistics"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-bold text-slate-800"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Company name displayed on Client Entry Links page and reports.
+                </p>
+              </div>
+
               {/* Sub-URL Code */}
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">

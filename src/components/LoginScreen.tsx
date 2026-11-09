@@ -107,12 +107,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onEnte
       <div className="w-full max-w-md bg-white rounded-2xl sm:rounded-3xl shadow-premium border border-slate-100 overflow-hidden relative p-5 sm:p-8">
         
         {/* Brand Header */}
-        <div className="flex flex-col items-center mb-5 sm:mb-6">
+        <div className="flex flex-col items-center mb-5 sm:mb-6 text-center">
           <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-600/30 mb-2.5 sm:mb-3 animate-fade-in">
             <ChilliLogo className="h-7 w-7 sm:h-8 sm:w-8" />
           </div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-800">AgroSync</h1>
-          <p className="text-[11px] sm:text-xs text-slate-500 font-medium uppercase tracking-wider mt-0.5 sm:mt-1">Agricultural Transaction Hub</p>
+          {currentTenant?.companyName && (
+            <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-emerald-800 mt-1">
+              {currentTenant.companyName}
+            </h2>
+          )}
+          <p className="text-[11px] sm:text-xs text-slate-500 font-medium uppercase tracking-wider mt-0.5 sm:mt-1">
+            {currentTenant?.subUrl ? `Branch Route: ${currentTenant.subUrl}` : 'Agricultural Transaction Hub'}
+          </p>
         </div>
 
         {/* Cloud Database Connection Banner / Trigger (User Screenshot Feature) */}

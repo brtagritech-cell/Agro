@@ -30,6 +30,7 @@ interface SupabaseConnectModalProps {
 const SUPABASE_SETUP_SQL = `-- 1. Create 'tenants' table for branch configurations
 CREATE TABLE IF NOT EXISTS public.tenants (
   sub_url TEXT PRIMARY KEY,
+  company_name TEXT DEFAULT '',
   owner_id TEXT NOT NULL,
   owner_password TEXT NOT NULL,
   sub_users JSONB DEFAULT '[]'::jsonb,
@@ -38,6 +39,9 @@ CREATE TABLE IF NOT EXISTS public.tenants (
   agents JSONB DEFAULT '[]'::jsonb,
   full_link TEXT DEFAULT ''
 );
+
+-- Ensure company_name column exists if table was created previously
+ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS company_name TEXT DEFAULT '';
 
 -- 2. Create 'transactions' table for ledger entries
 CREATE TABLE IF NOT EXISTS public.transactions (

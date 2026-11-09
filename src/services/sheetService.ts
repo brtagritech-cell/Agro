@@ -25,6 +25,7 @@ export interface Transaction {
 
 export interface TenantConfig {
   subUrl: string; // e.g. "/BRT/" or "/BRT/Test1/"
+  companyName?: string; // Company / Business name (e.g. "BRT Spices", "AgroSync Logistics")
   sheetUrl: string; // Left for backwards compatibility
   ownerId: string; // Owner username
   ownerPassword: string; // Owner password
@@ -43,6 +44,7 @@ const TENANTS_STORAGE_KEY = 'agrosync_tenants_config';
 const DEFAULT_TENANTS: TenantConfig[] = [
   {
     subUrl: '/BRT/',
+    companyName: 'BRT Spices',
     sheetUrl: '',
     ownerId: 'BRT',
     ownerPassword: '1234',
@@ -54,6 +56,7 @@ const DEFAULT_TENANTS: TenantConfig[] = [
   },
   {
     subUrl: '/Spicelink/',
+    companyName: 'Spice Link',
     sheetUrl: '',
     ownerId: 'Spicelink',
     ownerPassword: '1234',
@@ -65,6 +68,7 @@ const DEFAULT_TENANTS: TenantConfig[] = [
   },
   {
     subUrl: '/Agro/',
+    companyName: 'Agro Logistics',
     sheetUrl: '',
     ownerId: 'Agro',
     ownerPassword: '1234',
@@ -144,8 +148,10 @@ export function getTenants(): TenantConfig[] {
     const masterData = subUserPasswords._master_data || {};
     const bagCost = t.bagCost !== undefined ? t.bagCost : (masterData.bagCost !== undefined ? parseFloat(masterData.bagCost) : 25);
     const taram = t.taram !== undefined ? t.taram : (masterData.taram !== undefined ? parseFloat(masterData.taram) : 1.100);
+    const companyName = t.companyName || masterData.companyName || '';
     return {
       ...t,
+      companyName,
       bagCost,
       taram
     };
@@ -234,10 +240,12 @@ export async function syncBranchesToSheet(tenants: TenantConfig[]): Promise<{ su
       const passwords = { ...(t.subUserPasswords || {}) };
       passwords._master_data = {
         bagCost: t.bagCost ?? 25,
-        taram: t.taram ?? 1.100
+        taram: t.taram ?? 1.100,
+        companyName: t.companyName || ''
       };
       return {
         sub_url: t.subUrl,
+        company_name: t.companyName || '',
         owner_id: t.ownerId,
         owner_password: t.ownerPassword,
         sub_users: t.subUsers || [],
@@ -248,9 +256,15 @@ export async function syncBranchesToSheet(tenants: TenantConfig[]): Promise<{ su
       };
     });
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from('tenants')
       .upsert(rows);
+
+    if (error && error.message && error.message.includes('company_name')) {
+      const fallbackRows = rows.map(({ company_name, ...rest }: any) => rest);
+      const res = await supabase.from('tenants').upsert(fallbackRows);
+      error = res.error;
+    }
 
     if (error) {
       throw new Error(error.message);
@@ -368,8 +382,10 @@ export async function fetchTenantsFromSupabase(): Promise<{ success: boolean; te
         const masterData = subUserPasswords._master_data || {};
         const bagCost = masterData.bagCost !== undefined ? parseFloat(masterData.bagCost) : 25;
         const taram = masterData.taram !== undefined ? parseFloat(masterData.taram) : 1.100;
+        const companyName = t.company_name || masterData.companyName || '';
         return {
           subUrl: t.sub_url,
+          companyName,
           sheetUrl: '',
           ownerId: t.owner_id,
           ownerPassword: t.owner_password,
@@ -407,6 +423,7 @@ export async function updateBranchConfiguration(
   if (index === -1) {
     const newT: TenantConfig = {
       subUrl: normalizeSubUrl(subUrl),
+      companyName: updatedData.companyName || '',
       sheetUrl: '',
       ownerId: updatedData.ownerId || 'Owner',
       ownerPassword: updatedData.ownerPassword || '1234',
@@ -492,8 +509,10 @@ export async function fetchTransactions(): Promise<Transaction[]> {
         const masterData = subUserPasswords._master_data || {};
         const bagCost = masterData.bagCost !== undefined ? parseFloat(masterData.bagCost) : 25;
         const taram = masterData.taram !== undefined ? parseFloat(masterData.taram) : 1.100;
+        const companyName = t.company_name || masterData.companyName || '';
         return {
           subUrl: t.sub_url,
+          companyName,
           sheetUrl: '',
           ownerId: t.owner_id,
           ownerPassword: t.owner_password,
