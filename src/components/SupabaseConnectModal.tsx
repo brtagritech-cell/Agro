@@ -37,11 +37,15 @@ CREATE TABLE IF NOT EXISTS public.tenants (
   sub_user_passwords JSONB DEFAULT '{}'::jsonb,
   marks JSONB DEFAULT '[]'::jsonb,
   agents JSONB DEFAULT '[]'::jsonb,
-  full_link TEXT DEFAULT ''
+  full_link TEXT DEFAULT '',
+  bag_cost NUMERIC DEFAULT 25,
+  taram NUMERIC DEFAULT 1.100
 );
 
--- Ensure company_name column exists if table was created previously
+-- Ensure company_name, bag_cost, taram columns exist if table was created previously
 ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS company_name TEXT DEFAULT '';
+ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS bag_cost NUMERIC DEFAULT 25;
+ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS taram NUMERIC DEFAULT 1.100;
 
 -- 2. Create 'transactions' table for ledger entries
 CREATE TABLE IF NOT EXISTS public.transactions (

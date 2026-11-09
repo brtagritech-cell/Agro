@@ -252,7 +252,9 @@ export async function syncBranchesToSheet(tenants: TenantConfig[]): Promise<{ su
         sub_user_passwords: passwords,
         marks: t.marks || [],
         agents: t.agents || [],
-        full_link: t.fullLink || ''
+        full_link: t.fullLink || '',
+        bag_cost: t.bagCost ?? 25,
+        taram: t.taram ?? 1.100
       };
     });
 
@@ -260,8 +262,12 @@ export async function syncBranchesToSheet(tenants: TenantConfig[]): Promise<{ su
       .from('tenants')
       .upsert(rows);
 
-    if (error && error.message && error.message.includes('company_name')) {
-      const fallbackRows = rows.map(({ company_name, ...rest }: any) => rest);
+    if (error && error.message && (
+      error.message.includes('company_name') || 
+      error.message.includes('bag_cost') || 
+      error.message.includes('taram')
+    )) {
+      const fallbackRows = rows.map(({ company_name, bag_cost, taram, ...rest }: any) => rest);
       const res = await supabase.from('tenants').upsert(fallbackRows);
       error = res.error;
     }
@@ -380,8 +386,12 @@ export async function fetchTenantsFromSupabase(): Promise<{ success: boolean; te
       const mappedTenants: TenantConfig[] = tenantData.map(t => {
         const subUserPasswords = t.sub_user_passwords || {};
         const masterData = subUserPasswords._master_data || {};
-        const bagCost = masterData.bagCost !== undefined ? parseFloat(masterData.bagCost) : 25;
-        const taram = masterData.taram !== undefined ? parseFloat(masterData.taram) : 1.100;
+        const bagCost = t.bag_cost !== undefined && t.bag_cost !== null
+          ? Number(t.bag_cost)
+          : (masterData.bagCost !== undefined ? parseFloat(masterData.bagCost) : 25);
+        const taram = t.taram !== undefined && t.taram !== null
+          ? Number(t.taram)
+          : (masterData.taram !== undefined ? parseFloat(masterData.taram) : 1.100);
         const companyName = t.company_name || masterData.companyName || '';
         return {
           subUrl: t.sub_url,
@@ -507,8 +517,12 @@ export async function fetchTransactions(): Promise<Transaction[]> {
       const mappedTenants: TenantConfig[] = tenantData.map(t => {
         const subUserPasswords = t.sub_user_passwords || {};
         const masterData = subUserPasswords._master_data || {};
-        const bagCost = masterData.bagCost !== undefined ? parseFloat(masterData.bagCost) : 25;
-        const taram = masterData.taram !== undefined ? parseFloat(masterData.taram) : 1.100;
+        const bagCost = t.bag_cost !== undefined && t.bag_cost !== null
+          ? Number(t.bag_cost)
+          : (masterData.bagCost !== undefined ? parseFloat(masterData.bagCost) : 25);
+        const taram = t.taram !== undefined && t.taram !== null
+          ? Number(t.taram)
+          : (masterData.taram !== undefined ? parseFloat(masterData.taram) : 1.100);
         const companyName = t.company_name || masterData.companyName || '';
         return {
           subUrl: t.sub_url,
