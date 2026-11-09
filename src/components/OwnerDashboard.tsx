@@ -115,14 +115,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
   // Branch Settings & Master Data Modal states
   const [isMasterDataOpen, setIsMasterDataOpen] = useState(false);
-  const [masterTab, setModalTab] = useState<'subusers' | 'marks' | 'pricing' | 'agents'>('subusers');
-
-  // Master Rates & Taram is only visible on the root Agro Logistics branch (/Agro/)
-  // On all other client entry links (e.g. /BRT/, /Spicelink/), it is hidden
-  const normalizedPath = (tenant?.subUrl || '').replace(/^\/+|\/+$/g, '').toLowerCase();
-  const companyNameLower = (tenant?.companyName || '').toLowerCase();
-  const isAgroBranch = normalizedPath === 'agro' || companyNameLower.includes('agro logistics');
-  const showMasterDataTab = isAgroBranch;
+  const [masterTab, setModalTab] = useState<'subusers' | 'marks' | 'agents' | 'pricing'>('subusers');
 
   // Sub-Users state
   const [branchSubUsers, setBranchSubUsers] = useState<{ name: string; password: string }[]>([]);
@@ -204,11 +197,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     setMasterTaram(String(tenant.taram ?? 1.100));
   }, [tenant.subUrl, tenant.bagCost, tenant.taram]);
 
-  const openBranchSettingsModal = (initialTab: 'subusers' | 'marks' | 'pricing' | 'agents' = 'subusers') => {
+  const openBranchSettingsModal = (initialTab: 'subusers' | 'marks' | 'agents' | 'pricing' = 'subusers') => {
     const t = getCurrentTenant();
     setTenant(t);
-    const resolvedTab = (!showMasterDataTab && initialTab === 'pricing') ? 'subusers' : initialTab;
-    setModalTab(resolvedTab);
+    setModalTab(initialTab);
 
     // Format sub-users
     const formattedSubUsers = (t.subUsers || []).map(name => ({
@@ -731,21 +723,11 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
           <button
             onClick={() => openBranchSettingsModal('subusers')}
             className="flex items-center justify-center gap-2 px-4 py-2.5 sm:px-5 sm:py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 rounded-xl font-semibold active:scale-[0.98] transition-all text-xs sm:text-sm cursor-pointer shadow-2xs"
-            title="Manage Sub-Users & Brand Marks for this branch"
+            title="Manage Sub-Users, Marks, Agents & Master Data for this branch"
           >
             <Users className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-indigo-600" />
-            <span>Sub-Users & Marks</span>
+            <span>Branch Settings</span>
           </button>
-          {showMasterDataTab && (
-            <button
-              onClick={() => openBranchSettingsModal('pricing')}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 sm:px-5 sm:py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl font-semibold active:scale-[0.98] transition-all text-xs sm:text-sm cursor-pointer"
-              title="Change Bag Cost and Taram for this branch"
-            >
-              <Database className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-indigo-600" />
-              <span>Change Master Data</span>
-            </button>
-          )}
           <button
             onClick={() => {
               setFormError('');
@@ -1415,10 +1397,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
                     <Database className="h-4.5 w-4.5" />
                   </div>
-                  <span>{showMasterDataTab ? 'Branch Settings & Master Data' : 'Branch Settings'}</span>
+                  <span>Branch Settings & Master Data</span>
                 </h3>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  Manage sub-users, marks{showMasterDataTab ? ', and parameters' : ' and agents'} for branch <code className="bg-slate-100 font-mono font-bold px-1.5 py-0.5 rounded text-indigo-700">{tenant.subUrl}</code>
+                  Manage sub-users, marks, agents, and parameters for branch <code className="bg-slate-100 font-mono font-bold px-1.5 py-0.5 rounded text-indigo-700">{tenant.subUrl}</code>
                 </p>
               </div>
               <button 
@@ -1455,20 +1437,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                 <Tag className="w-3.5 h-3.5" />
                 <span>Allowed Marks ({branchMarks.length})</span>
               </button>
-              {showMasterDataTab && (
-                <button
-                  type="button"
-                  onClick={() => setModalTab('pricing')}
-                  className={`flex items-center gap-1.5 px-3 py-2 font-bold rounded-xl transition-all shrink-0 cursor-pointer ${
-                    masterTab === 'pricing'
-                      ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
-                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  <Database className="w-3.5 h-3.5" />
-                  <span>Master Rates & Taram</span>
-                </button>
-              )}
               <button
                 type="button"
                 onClick={() => setModalTab('agents')}
@@ -1480,6 +1448,18 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               >
                 <FileText className="w-3.5 h-3.5" />
                 <span>Agents ({branchAgents.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalTab('pricing')}
+                className={`flex items-center gap-1.5 px-3 py-2 font-bold rounded-xl transition-all shrink-0 cursor-pointer ${
+                  masterTab === 'pricing'
+                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Database className="w-3.5 h-3.5" />
+                <span>Change Master Data</span>
               </button>
             </div>
 
@@ -1700,59 +1680,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               </div>
             )}
 
-            {/* TAB 3: MASTER RATES (PRICING & TARAM) */}
-            {showMasterDataTab && masterTab === 'pricing' && (
-              <div className="space-y-4">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                    Master Calculation Rates
-                  </h4>
-                  <p className="text-[11px] text-slate-400">
-                    Default parameters for calculating net values and weights for this branch
-                  </p>
-                </div>
-
-                {/* Bag Cost Input */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Bag Cost (₹ per Bag)
-                  </label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="0.01"
-                    min="0"
-                    required
-                    placeholder="e.g. 25.00"
-                    value={masterBagCost}
-                    onChange={(e) => setMasterBagCost(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-semibold font-mono"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">Cost deducted per bag during gross weight calculation.</p>
-                </div>
-
-                {/* Taram (Tare Weight per Bag) */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Taram (Tare weight per bag - kg)
-                  </label>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="0.001"
-                    min="0.001"
-                    required
-                    placeholder="e.g. 1.100"
-                    value={masterTaram}
-                    onChange={(e) => setMasterTaram(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-semibold font-mono"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">Standard bag deduction in kilograms (e.g. 1.100 kg per bag).</p>
-                </div>
-              </div>
-            )}
-
-            {/* TAB 4: COMMISSION AGENTS */}
+            {/* TAB 3: COMMISSION AGENTS */}
             {masterTab === 'agents' && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -1834,6 +1762,58 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                       </div>
                     ))
                   )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: CHANGE MASTER DATA (PRICING & TARAM) */}
+            {masterTab === 'pricing' && (
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Master Calculation Rates
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Default parameters for calculating net values and weights for this branch
+                  </p>
+                </div>
+
+                {/* Bag Cost Input */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Bag Cost (₹ per Bag)
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    required
+                    placeholder="e.g. 25.00"
+                    value={masterBagCost}
+                    onChange={(e) => setMasterBagCost(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-semibold font-mono"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Cost deducted per bag during gross weight calculation.</p>
+                </div>
+
+                {/* Taram (Tare Weight per Bag) */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Taram (Tare weight per bag - kg)
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.001"
+                    min="0.001"
+                    required
+                    placeholder="e.g. 1.100"
+                    value={masterTaram}
+                    onChange={(e) => setMasterTaram(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-semibold font-mono"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Standard bag deduction in kilograms (e.g. 1.100 kg per bag).</p>
                 </div>
               </div>
             )}
