@@ -117,6 +117,13 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const [isMasterDataOpen, setIsMasterDataOpen] = useState(false);
   const [masterTab, setModalTab] = useState<'subusers' | 'marks' | 'pricing' | 'agents'>('subusers');
 
+  // Master Rates & Taram is only visible on the root Agro Logistics branch (/Agro/)
+  // On all other client entry links (e.g. /BRT/, /Spicelink/), it is hidden
+  const normalizedPath = (tenant?.subUrl || '').replace(/^\/+|\/+$/g, '').toLowerCase();
+  const companyNameLower = (tenant?.companyName || '').toLowerCase();
+  const isAgroBranch = normalizedPath === 'agro' || companyNameLower.includes('agro logistics');
+  const showMasterDataTab = isAgroBranch;
+
   // Sub-Users state
   const [branchSubUsers, setBranchSubUsers] = useState<{ name: string; password: string }[]>([]);
   const [newBranchSubUserName, setNewBranchSubUserName] = useState('');
@@ -200,7 +207,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const openBranchSettingsModal = (initialTab: 'subusers' | 'marks' | 'pricing' | 'agents' = 'subusers') => {
     const t = getCurrentTenant();
     setTenant(t);
-    setModalTab(initialTab);
+    const resolvedTab = (!showMasterDataTab && initialTab === 'pricing') ? 'subusers' : initialTab;
+    setModalTab(resolvedTab);
 
     // Format sub-users
     const formattedSubUsers = (t.subUsers || []).map(name => ({
@@ -728,14 +736,16 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
             <Users className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-indigo-600" />
             <span>Sub-Users & Marks</span>
           </button>
-          <button
-            onClick={() => openBranchSettingsModal('pricing')}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 sm:px-5 sm:py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl font-semibold active:scale-[0.98] transition-all text-xs sm:text-sm cursor-pointer"
-            title="Change Bag Cost and Taram for this branch"
-          >
-            <Database className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-indigo-600" />
-            <span>Change Master Data</span>
-          </button>
+          {showMasterDataTab && (
+            <button
+              onClick={() => openBranchSettingsModal('pricing')}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 sm:px-5 sm:py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl font-semibold active:scale-[0.98] transition-all text-xs sm:text-sm cursor-pointer"
+              title="Change Bag Cost and Taram for this branch"
+            >
+              <Database className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-indigo-600" />
+              <span>Change Master Data</span>
+            </button>
+          )}
           <button
             onClick={() => {
               setFormError('');
@@ -1405,10 +1415,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
                     <Database className="h-4.5 w-4.5" />
                   </div>
-                  <span>Branch Settings & Master Data</span>
+                  <span>{showMasterDataTab ? 'Branch Settings & Master Data' : 'Branch Settings'}</span>
                 </h3>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  Manage sub-users, marks, and parameters for branch <code className="bg-slate-100 font-mono font-bold px-1.5 py-0.5 rounded text-indigo-700">{tenant.subUrl}</code>
+                  Manage sub-users, marks{showMasterDataTab ? ', and parameters' : ' and agents'} for branch <code className="bg-slate-100 font-mono font-bold px-1.5 py-0.5 rounded text-indigo-700">{tenant.subUrl}</code>
                 </p>
               </div>
               <button 
@@ -1445,18 +1455,20 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                 <Tag className="w-3.5 h-3.5" />
                 <span>Allowed Marks ({branchMarks.length})</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setModalTab('pricing')}
-                className={`flex items-center gap-1.5 px-3 py-2 font-bold rounded-xl transition-all shrink-0 cursor-pointer ${
-                  masterTab === 'pricing'
-                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
-                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                <Database className="w-3.5 h-3.5" />
-                <span>Master Rates & Taram</span>
-              </button>
+              {showMasterDataTab && (
+                <button
+                  type="button"
+                  onClick={() => setModalTab('pricing')}
+                  className={`flex items-center gap-1.5 px-3 py-2 font-bold rounded-xl transition-all shrink-0 cursor-pointer ${
+                    masterTab === 'pricing'
+                      ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
+                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  <span>Master Rates & Taram</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setModalTab('agents')}
@@ -1689,7 +1701,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
             )}
 
             {/* TAB 3: MASTER RATES (PRICING & TARAM) */}
-            {masterTab === 'pricing' && (
+            {showMasterDataTab && masterTab === 'pricing' && (
               <div className="space-y-4">
                 <div>
                   <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
@@ -1791,26 +1803,35 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   </div>
                 )}
 
-                {/* Added Agents Display List */}
-                <div className="flex flex-wrap gap-1.5 p-2.5 bg-slate-50 border border-slate-200 rounded-xl min-h-[46px] items-center">
+                {/* Added Agents Display List - Individual Rows */}
+                <div className="space-y-1.5 max-h-[280px] overflow-y-auto p-1 pr-1.5 bg-slate-50/50 rounded-xl border border-slate-100">
                   {branchAgents.length === 0 ? (
-                    <span className="text-[11px] text-slate-400 italic">No agent names added yet. Enter an agent name above and click Add Agent.</span>
+                    <div className="p-4 bg-white border border-slate-200 rounded-xl text-center text-xs text-slate-400 italic">
+                      No agent names added yet. Enter an agent name above and click Add Agent.
+                    </div>
                   ) : (
                     branchAgents.map((a, idx) => (
-                      <span
+                      <div
                         key={idx}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-emerald-200 text-emerald-800 font-semibold text-xs rounded-lg shadow-2xs group"
+                        className="flex items-center justify-between px-3.5 py-2.5 bg-white border border-slate-200 hover:border-emerald-300 rounded-xl shadow-2xs group transition-all"
                       >
-                        <span>{a}</span>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded shrink-0">
+                            #{idx + 1}
+                          </span>
+                          <span className="text-xs sm:text-sm font-bold text-slate-800 truncate">
+                            {a}
+                          </span>
+                        </div>
                         <button
                           type="button"
                           onClick={() => handleRemoveBranchAgent(idx)}
-                          className="text-emerald-500 hover:text-rose-600 hover:bg-rose-50 p-0.5 rounded transition-colors cursor-pointer"
+                          className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
                           title={`Remove ${a}`}
                         >
-                          <X className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
-                      </span>
+                      </div>
                     ))
                   )}
                 </div>
