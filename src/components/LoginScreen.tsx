@@ -47,6 +47,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onEnte
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
   const [supabaseCreds, setSupabaseCreds] = useState(getSupabaseCredentials());
 
+  // Master Admin Login is only visible on the Agro Logistics branch route (/Agro/) or /admin/
+  // For all other client entry links, it is hidden
+  const normalizedPath = (currentSubUrl || '').replace(/^\/+|\/+$/g, '').toLowerCase();
+  const tenantNormalizedSubUrl = (currentTenant?.subUrl || '').replace(/^\/+|\/+$/g, '').toLowerCase();
+  const companyNameLower = (currentTenant?.companyName || '').toLowerCase();
+
+  const isAgroBranch = normalizedPath === 'agro' || tenantNormalizedSubUrl === 'agro' || companyNameLower.includes('agro logistics');
+  const isAdminRoute = normalizedPath === 'admin' || tenantNormalizedSubUrl === 'admin';
+  const showAdminLogin = isAgroBranch || isAdminRoute;
+
   const handleSupabaseUpdated = () => {
     setSupabaseCreds(getSupabaseCredentials());
   };
@@ -303,7 +313,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onEnte
         </div>
 
         {/* Admin & Database Access Panel Links */}
-        <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className={`mt-6 pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center ${showAdminLogin ? 'justify-between' : 'justify-center'} gap-2`}>
           <button
             type="button"
             onClick={() => setIsSupabaseModalOpen(true)}
@@ -313,14 +323,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess, onEnte
             <span>Database Connection</span>
           </button>
 
-          <button
-            type="button"
-            onClick={onEnterAdmin}
-            className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 px-2.5 py-1.5 rounded-lg transition-all"
-          >
-            <Settings className="h-3.5 w-3.5" />
-            <span>Master Admin Login</span>
-          </button>
+          {showAdminLogin && (
+            <button
+              type="button"
+              onClick={onEnterAdmin}
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 px-2.5 py-1.5 rounded-lg transition-all"
+            >
+              <Settings className="h-3.5 w-3.5" />
+              <span>Master Admin Login</span>
+            </button>
+          )}
         </div>
       </div>
 
