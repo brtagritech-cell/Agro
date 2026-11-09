@@ -685,7 +685,14 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
       {/* Overview stats header */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 sm:gap-4 bg-white p-4 sm:p-6 rounded-2xl border border-slate-100 shadow-soft">
         <div>
-          <h2 className="text-lg sm:text-xl font-bold text-slate-800">Owner Terminal</h2>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-800">Owner Terminal</h2>
+            {tenant.companyName && (
+              <span className="text-base sm:text-lg font-black text-emerald-800 bg-emerald-50 border border-emerald-200/90 px-3 py-0.5 rounded-xl shadow-2xs">
+                {tenant.companyName}
+              </span>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-0.5">
             <span className="text-xs text-slate-500">Control hub and transaction scheduler</span>
             <button

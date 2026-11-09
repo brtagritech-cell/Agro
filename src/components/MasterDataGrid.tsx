@@ -158,7 +158,14 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
       {/* Dashboard Toolbar */}
       <div className="flex justify-between items-center bg-white p-3.5 sm:p-4 rounded-2xl shadow-soft border border-slate-100">
         <div>
-          <h2 className="text-lg sm:text-xl font-bold text-slate-800">Master Ledger</h2>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h2 className="text-lg sm:text-xl font-bold text-slate-800">Master Ledger</h2>
+            {currentTenant?.companyName && (
+              <span className="text-base sm:text-lg font-black text-emerald-800 bg-emerald-50 border border-emerald-200/90 px-3 py-0.5 rounded-xl shadow-2xs">
+                {currentTenant.companyName}
+              </span>
+            )}
+          </div>
           <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Real-time agricultural entries overview</p>
         </div>
         <div className="flex items-center gap-2">

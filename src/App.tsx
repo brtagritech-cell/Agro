@@ -3,7 +3,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { OwnerDashboard } from './components/OwnerDashboard';
 import { MasterDataGrid } from './components/MasterDataGrid';
 import { SubUserDashboard } from './components/SubUserDashboard';
-import { fetchTransactions, addTransaction, updateWeight, setScriptUrl, getCurrentSubUrl, type Transaction } from './services/sheetService';
+import { fetchTransactions, addTransaction, updateWeight, setScriptUrl, getCurrentSubUrl, getCurrentTenant, type Transaction } from './services/sheetService';
 import { LogOut, LayoutDashboard, FileSpreadsheet, CheckCircle, AlertTriangle, X, Zap } from 'lucide-react';
 import { AdminDashboard } from './components/AdminDashboard';
 import { SupabaseConnectModal } from './components/SupabaseConnectModal';
@@ -15,6 +15,7 @@ const getSubRouteStorageKey = (prefix: string) => {
 };
 
 function App() {
+  const currentTenant = getCurrentTenant();
   const [userRole, setUserRole] = useState<'Owner' | 'Sub-User' | null>(() => {
     const key = getSubRouteStorageKey('agrosync_user_role');
     return (sessionStorage.getItem(key) as 'Owner' | 'Sub-User') || null;
@@ -295,8 +296,18 @@ function App() {
               </span>
             </div>
             <div>
-              <h1 className="text-xs sm:text-sm lg:text-base font-bold text-slate-800 leading-none">AgroSync</h1>
-              <span className="text-[8px] sm:text-[9px] font-bold text-red-600 uppercase tracking-wider mt-0.5 block">Owner Portal</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider leading-none">AgroSync</span>
+                <span className="text-slate-300 leading-none">•</span>
+                <span className="text-[9px] sm:text-[10px] font-bold text-red-600 uppercase tracking-wider leading-none">Owner Portal</span>
+              </div>
+              {currentTenant?.companyName ? (
+                <h1 className="text-sm sm:text-base lg:text-lg font-black text-emerald-800 tracking-tight leading-tight mt-0.5">
+                  {currentTenant.companyName}
+                </h1>
+              ) : (
+                <h1 className="text-xs sm:text-sm lg:text-base font-bold text-slate-800 leading-none mt-0.5">AgroSync</h1>
+              )}
             </div>
           </div>
 

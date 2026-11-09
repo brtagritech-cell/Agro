@@ -474,21 +474,30 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
           <div className="h-11 w-11 sm:h-14 sm:w-14 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 shadow-sm border border-emerald-100 shrink-0">
             <FileSpreadsheet className="h-5 w-5 sm:h-7 sm:w-7" />
           </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 block">
-                Sub-User Terminal
+          <div className="min-w-0">
+            {/* Top Tagline: AgroSync & Branch Sub-User Terminal */}
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">
+                AgroSync
               </span>
-              <span className="text-slate-300 hidden sm:inline">•</span>
-              <span className="text-[10px] sm:text-xs text-slate-500 font-semibold uppercase tracking-wider hidden sm:inline">
-                Weight Optimization Window
+              <span className="text-slate-300">•</span>
+              <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                Sub-User Terminal {currentTenant?.subUrl ? `(${currentTenant.subUrl})` : ''}
               </span>
             </div>
+
+            {/* Company Name (Displayed Big in Size) */}
+            {currentTenant?.companyName && (
+              <h1 className="text-lg sm:text-2xl font-black text-emerald-800 tracking-tight leading-tight mt-1">
+                {currentTenant.companyName}
+              </h1>
+            )}
             
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-0.5 sm:mt-1">
+            {/* Sub-User Login Name & Connection Status */}
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1.5 sm:mt-2">
               <div className="flex items-center gap-1.5">
-                <span className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Operator:</span>
-                <span className="text-lg sm:text-2xl font-black text-emerald-800 bg-emerald-50/90 px-3 py-0.5 rounded-xl border border-emerald-200/80 shadow-2xs font-mono flex items-center gap-1.5">
+                <span className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider">Sub-User:</span>
+                <span className="text-base sm:text-xl font-black text-emerald-800 bg-emerald-50/90 px-3 py-0.5 rounded-xl border border-emerald-200/80 shadow-2xs font-mono flex items-center gap-1.5">
                   <User className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
                   {subUserName || 'Sub-User'}
                 </span>
