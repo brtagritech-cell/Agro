@@ -413,6 +413,17 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
   const [activeQueueFilter, setActiveQueueFilter] = useState<'all' | 'pending' | 'completed'>('pending');
   const [selectedSubUserFilter, setSelectedSubUserFilter] = useState<string>('all');
 
+  // Prevent background scrolling when modal is active
+  useEffect(() => {
+    if (selectedTx || viewingTx) {
+      const originalStyle = window.getComputedStyle(document.body).overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalStyle;
+      };
+    }
+  }, [selectedTx, viewingTx]);
+
   // Sum of bags logged by this subuser today
   const totalBagsLoggedToday = todayTransactions
     .filter(tx => tx.subUserName === subUserName && tx.weight && tx.weight.trim() !== '')
@@ -914,15 +925,18 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
       {/* Weight Optimization Dynamic Entry Modal */}
       {selectedTx && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
-          <div className="w-full sm:max-w-xl md:max-w-2xl bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 p-4 sm:p-6 lg:p-7 flex flex-col max-h-[92dvh] sm:max-h-[90vh] animate-slide-up overflow-y-auto overscroll-contain">
+          {/* Close tap overlay */}
+          <div className="absolute inset-0" onClick={() => !isSaving && closeWeightModal()} />
+
+          <div className="w-full sm:max-w-xl md:max-w-2xl bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 flex flex-col max-h-[92dvh] sm:max-h-[90vh] z-10 animate-slide-up overflow-hidden">
             {/* Mobile Sheet Drag Handle */}
-            <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mb-2 sm:hidden shrink-0" />
+            <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
             
             {/* Modal Header */}
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3 shrink-0">
+            <div className="flex justify-between items-center border-b border-slate-100 px-4 py-3 sm:px-6 shrink-0">
               <div>
-                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                  <Scale className="h-4.5 w-4.5 text-emerald-600" />
+                <h3 className="text-sm sm:text-base font-bold text-slate-800 flex items-center gap-2">
+                  <Scale className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
                   <span>{step === 'entry' ? 'Weight Optimization Entry' : 'Verify & Recheck Ledger'}</span>
                 </h3>
                 <p className="text-[10px] text-slate-500 mt-0.5 font-medium uppercase tracking-wider">
@@ -932,159 +946,171 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
               <button 
                 onClick={closeWeightModal}
                 disabled={isSaving}
-                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all"
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Target Lot Meta Box */}
-            <div className="bg-slate-50/50 border border-slate-200/50 p-3 sm:p-3.5 rounded-xl text-xs space-y-1 mt-2.5 sm:mt-3 shrink-0">
-              <div className="flex justify-between font-mono gap-2">
-                <span className="text-slate-400 shrink-0">LOT {selectedTx.lot}</span>
-                <span className="font-bold text-slate-800 break-all text-right">{selectedTx.transactionId}</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-1 text-slate-600 font-medium pt-1 border-t border-slate-200/40">
-                <div>Agent Name: <span className="text-slate-800 font-bold break-words">{selectedTx.agent}</span></div>
-                <div>Original Mark: <span className="text-slate-800 font-bold uppercase">{selectedTx.mark}</span></div>
-                <div>Owner Bags: <span className="text-slate-800 font-bold font-mono">{selectedTx.bags} Bags</span></div>
-                <div>Owner Rate: <span className="text-slate-800 font-bold font-mono">{formatINR(selectedTx.rate)}</span></div>
-              </div>
-            </div>
-
-            {/* Feedback alert messages */}
-            {feedback && (
-              <div className={`p-3 rounded-xl flex items-start gap-2.5 text-xs font-semibold mt-3 shrink-0 ${
-                feedback.success 
-                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-100' 
-                  : 'bg-rose-50 text-rose-800 border border-rose-100'
-              }`}>
-                {feedback.success ? (
-                  <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 shrink-0 mt-0.5" />
-                ) : (
-                  <AlertCircle className="h-4.5 w-4.5 text-rose-600 shrink-0 mt-0.5" />
-                )}
-                <span className="leading-relaxed">{feedback.message}</span>
-              </div>
-            )}
-
             {/* Step 1: Bag Weights List Entry */}
             {step === 'entry' && (
-              <form onSubmit={handleProceedToConfirm} className="flex-grow flex flex-col overflow-hidden min-h-0 mt-4 space-y-4">
-                <div className="flex justify-between items-center shrink-0">
-                  <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
-                    Bag Weights List (kg)
-                  </span>
-                </div>
-
-                {/* Weights input rows */}
-                <div ref={listRef} className="flex-grow overflow-y-auto space-y-2 pr-1 border border-slate-100 rounded-xl p-2 bg-slate-50/20">
-                  {bagWeights.map((weight, idx) => (
-                    <div key={`bag-${idx}`} className="flex items-center gap-2 animate-fade-in">
-                      <span className="w-14 text-[11px] text-slate-400 font-mono font-bold">
-                        Bag #{idx + 1}
-                      </span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        required
-                        placeholder="Weight in kg (e.g. 12.100)"
-                        value={weight}
-                        onChange={(e) => handleWeightChange(idx, e.target.value)}
-                        onBlur={() => handleWeightBlur(idx)}
-                        onKeyDown={handleKeyDown}
-                        autoFocus={idx === bagWeights.length - 1 && idx > 0}
-                        className={`flex-grow px-3 py-1.5 bg-white border rounded-lg text-xs font-semibold font-mono focus:ring-1 transition-all ${
-                          isWeightInvalid(weight)
-                            ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500 text-rose-900 bg-rose-50/30'
-                            : 'border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 text-slate-800'
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveBagRow(idx)}
-                        disabled={bagWeights.length <= 1}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 disabled:text-slate-200 hover:bg-rose-50 disabled:bg-transparent rounded-lg transition-all shrink-0"
-                        title="Remove Bag"
-                      >
-                        <Trash2 className="h-4.5 w-4.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Add Bag Button below the fields */}
-                <button
-                  type="button"
-                  onClick={handleAddBagRow}
-                  className="w-full py-2 border-2 border-dashed border-emerald-300 hover:border-emerald-500 bg-emerald-50/30 hover:bg-emerald-50/60 text-emerald-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shrink-0"
+              <form onSubmit={handleProceedToConfirm} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                {/* Scrollable Body */}
+                <div 
+                  className="flex-1 overflow-y-auto overscroll-contain p-3.5 sm:p-6 space-y-3 sm:space-y-4 touch-pan-y"
+                  style={{ WebkitOverflowScrolling: 'touch' }}
                 >
-                  <Plus className="h-4 w-4" />
-                  <span>Add Bag</span>
-                </button>
+                  {/* Target Lot Meta Box - Compact 2-column mobile layout */}
+                  <div className="bg-slate-50/70 border border-slate-200/60 p-2.5 sm:p-3 rounded-xl text-xs space-y-1 shrink-0 shadow-2xs">
+                    <div className="flex justify-between items-center font-mono gap-2">
+                      <span className="font-bold text-slate-700 bg-slate-200/70 px-2 py-0.5 rounded text-[11px]">LOT {selectedTx.lot}</span>
+                      <span className="font-bold text-slate-800 text-[11px] sm:text-xs select-all truncate">{selectedTx.transactionId}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-slate-600 font-medium pt-1.5 border-t border-slate-200/50 text-[11px]">
+                      <div className="truncate">Agent: <span className="text-slate-800 font-bold">{selectedTx.agent}</span></div>
+                      <div>Mark: <span className="text-slate-800 font-bold uppercase font-mono px-1.5 py-0.2 bg-emerald-50 text-emerald-800 rounded border border-emerald-200/60">{selectedTx.mark}</span></div>
+                      <div>Owner Bags: <span className="text-slate-800 font-bold font-mono">{selectedTx.bags} Bags</span></div>
+                      <div>Owner Rate: <span className="text-slate-800 font-bold font-mono">{formatINR(selectedTx.rate)}</span></div>
+                    </div>
+                  </div>
 
-                {/* Formulas & Calculations Metrics footer */}
-                {(() => {
-                  const gross = bagWeights.reduce((sum, w) => sum + (Math.round((parseFloat(w) || 0) * 10) / 10), 0);
-                  const tare = bagWeights.length * taram;
-                  const net = Math.max(0, gross - tare);
-                  const currentRateInput = parseFloat(confirmedRate || (selectedTx ? selectedTx.rate.toString() : '0')) || 0;
-                  const truncatedRateInput = getFirstThreeDigits(currentRateInput);
-                  const calcGrossAmount = (net * truncatedRateInput) + (bagCost * bagWeights.length);
-                  
-                  return (
-                    <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl space-y-2 text-xs shrink-0 w-full">
-                      <div className="flex justify-between font-semibold border-b border-slate-200/50 pb-1.5 mb-1 text-slate-500">
-                        <span>Operational Calculations</span>
-                        <span className="font-mono text-[10px]">TARE DEDUCTION: {taram.toFixed(3)} KG/BAG</span>
+                  {/* Feedback alert messages */}
+                  {feedback && (
+                    <div className={`p-3 rounded-xl flex items-start gap-2.5 text-xs font-semibold shrink-0 ${
+                      feedback.success 
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-100' 
+                        : 'bg-rose-50 text-rose-800 border border-rose-100'
+                    }`}>
+                      {feedback.success ? (
+                        <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertCircle className="h-4.5 w-4.5 text-rose-600 shrink-0 mt-0.5" />
+                      )}
+                      <span className="leading-relaxed">{feedback.message}</span>
+                    </div>
+                  )}
+
+                  {/* Bag Weights List Section Header */}
+                  <div className="flex justify-between items-center shrink-0 pt-0.5">
+                    <span className="block text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <span>Bag Weights List (kg)</span>
+                    </span>
+                    <span className="text-[11px] font-bold font-mono bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                      {bagWeights.length} Bags ({bagWeights.filter(w => parseFloat(w) > 0).length} Entered)
+                    </span>
+                  </div>
+
+                  {/* Weights input rows - Guaranteed visible & comfortably scrollable */}
+                  <div 
+                    ref={listRef} 
+                    className="overflow-y-auto overscroll-contain touch-pan-y min-h-[190px] sm:min-h-[230px] max-h-[300px] sm:max-h-[380px] space-y-2 pr-1.5 border border-slate-200 rounded-2xl p-2.5 bg-slate-50/40 shadow-inner"
+                    style={{ WebkitOverflowScrolling: 'touch' }}
+                  >
+                    {bagWeights.map((weight, idx) => (
+                      <div 
+                        key={`bag-${idx}`} 
+                        className="flex items-center gap-2 animate-fade-in bg-white p-1 sm:p-1.5 rounded-xl border border-slate-200/80 shadow-2xs hover:border-emerald-300 transition-all"
+                      >
+                        <span className="w-14 sm:w-16 text-[11px] sm:text-xs text-slate-500 font-mono font-bold shrink-0 pl-1.5">
+                          Bag #{idx + 1}
+                        </span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          required
+                          placeholder="00.000 kg"
+                          value={weight}
+                          onChange={(e) => handleWeightChange(idx, e.target.value)}
+                          onBlur={() => handleWeightBlur(idx)}
+                          onKeyDown={handleKeyDown}
+                          autoFocus={idx === bagWeights.length - 1 && idx > 0}
+                          className={`flex-grow px-3 py-2 bg-slate-50/60 focus:bg-white border rounded-xl text-xs sm:text-sm font-bold font-mono focus:ring-1 transition-all ${
+                            isWeightInvalid(weight)
+                              ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500 text-rose-900 bg-rose-50/30'
+                              : 'border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 text-slate-800'
+                          }`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBagRow(idx)}
+                          disabled={bagWeights.length <= 1}
+                          className="p-2 text-slate-400 hover:text-rose-600 disabled:text-slate-200 hover:bg-rose-50 disabled:bg-transparent rounded-xl transition-all shrink-0 cursor-pointer"
+                          title="Remove Bag"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
-                      
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-x-6 font-medium text-slate-600">
-                        {/* Left Column */}
-                        <div className="space-y-1.5">
+                    ))}
+                  </div>
+
+                  {/* Add Bag Button */}
+                  <button
+                    type="button"
+                    onClick={handleAddBagRow}
+                    className="w-full py-2.5 border-2 border-dashed border-emerald-400 hover:border-emerald-500 active:bg-emerald-100 bg-emerald-50/60 text-emerald-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-2xs active:scale-[0.99]"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add Bag ({bagWeights.length + 1})</span>
+                  </button>
+
+                  {/* Compact Operational Calculations Card */}
+                  {(() => {
+                    const gross = bagWeights.reduce((sum, w) => sum + (Math.round((parseFloat(w) || 0) * 10) / 10), 0);
+                    const tare = bagWeights.length * taram;
+                    const net = Math.max(0, gross - tare);
+                    const currentRateInput = parseFloat(confirmedRate || (selectedTx ? selectedTx.rate.toString() : '0')) || 0;
+                    const truncatedRateInput = getFirstThreeDigits(currentRateInput);
+                    const calcGrossAmount = (net * truncatedRateInput) + (bagCost * bagWeights.length);
+                    
+                    return (
+                      <div className="bg-slate-50 border border-slate-200 p-3 sm:p-3.5 rounded-xl space-y-2 text-xs shrink-0 w-full shadow-2xs">
+                        <div className="flex justify-between items-center font-semibold border-b border-slate-200/60 pb-1.5 text-slate-500">
+                          <span className="font-bold text-slate-700 uppercase tracking-wider text-[10px]">Operational Calculations</span>
+                          <span className="font-mono text-[10px] bg-slate-200/70 px-1.5 py-0.5 rounded text-slate-600">TARE: {taram.toFixed(3)} KG/BAG</span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 font-medium text-slate-600 text-[11px] sm:text-xs">
                           <div className="flex justify-between">
                             <span>Total Bags:</span>
                             <span className="font-bold text-slate-800 font-mono">{bagWeights.length} Bags</span>
                           </div>
-                        </div>
-                        {/* Right Column */}
-                        <div className="space-y-1.5">
                           <div className="flex justify-between">
                             <span>Gross Weight:</span>
                             <span className="font-bold text-slate-800 font-mono">{gross.toFixed(3)} kg</span>
                           </div>
                           <div className="flex justify-between">
-                            <span>Bags Weight (Tare):</span>
-                            <span className="font-bold text-slate-800 font-mono">{tare.toFixed(3)} kg</span>
+                            <span>Tare Deduction:</span>
+                            <span className="font-bold text-slate-800 font-mono">-{tare.toFixed(3)} kg</span>
                           </div>
                           <div className="flex justify-between">
                             <span>Net Weight:</span>
-                            <span className="font-bold text-slate-700 font-mono">{net.toFixed(3)} kg</span>
+                            <span className="font-bold text-emerald-800 font-mono">{net.toFixed(3)} kg</span>
                           </div>
                         </div>
+                        
+                        <div className="border-t border-slate-200/60 pt-1.5 flex justify-between items-center text-xs sm:text-sm font-bold text-slate-800">
+                          <span className="text-[11px] text-slate-500">Calculated Net Amount:</span>
+                          <span className="text-sm sm:text-base font-extrabold font-mono text-emerald-700">
+                            {formatINR(calcGrossAmount)}
+                          </span>
+                        </div>
                       </div>
-                      
-                      <div className="border-t border-slate-200/50 pt-2 flex justify-between items-center text-xs sm:text-sm font-bold text-slate-800">
-                        <span className="text-[11px] sm:text-xs text-slate-500">Calculated Gross Amount:</span>
-                        <span className="text-sm sm:text-base font-extrabold font-mono text-emerald-700">
-                          {formatINR(calcGrossAmount)}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })()}
+                    );
+                  })()}
+                </div>
 
-                <div className="flex gap-2 pt-2 border-t border-slate-100 shrink-0">
+                {/* Fixed Pinned Footer */}
+                <div className="p-3.5 sm:p-5 bg-white border-t border-slate-100 shrink-0 shadow-xs flex gap-2">
                   <button
                     type="button"
                     onClick={closeWeightModal}
-                    className="flex-1 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold transition-all"
+                    className="flex-1 py-2.5 sm:py-3 border border-slate-200 hover:bg-slate-50 active:bg-slate-100 text-slate-600 rounded-xl text-xs font-bold transition-all cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/10 flex items-center justify-center gap-1.5"
+                    className="flex-1 py-2.5 sm:py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/10 flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.99]"
                   >
                     <span>Proceed to Confirm</span>
                     <ArrowRight className="h-4 w-4" />
@@ -1095,120 +1121,125 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
 
             {/* Step 2: Comparative Recheck Dashboard */}
             {step === 'confirm' && (
-              <div className="flex-grow flex flex-col justify-between overflow-y-auto mt-4 space-y-4">
-                
-                <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  Ledger Re-confirmation Grid
-                </span>
+              <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                {/* Scrollable Body */}
+                <div 
+                  className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-4 touch-pan-y"
+                  style={{ WebkitOverflowScrolling: 'touch' }}
+                >
+                  <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Ledger Re-confirmation Grid
+                  </span>
 
-                {/* Comparison Grid Table */}
-                <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
-                  <div className="grid grid-cols-3 bg-slate-50 p-2 sm:p-2.5 font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 text-[10px] sm:text-xs">
-                    <div>Metric</div>
-                    <div>Owner Value</div>
-                    <div>Sub-User Value / Edit</div>
+                  {/* Comparison Grid Table */}
+                  <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
+                    <div className="grid grid-cols-3 bg-slate-50 p-2 sm:p-2.5 font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 text-[10px] sm:text-xs">
+                      <div>Metric</div>
+                      <div>Owner Value</div>
+                      <div>Sub-User Value / Edit</div>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      
+                      {/* Bags Comparison */}
+                      <div className={`grid grid-cols-3 p-2 sm:p-3 items-center text-[11px] sm:text-xs ${isBagsMismatch ? 'bg-amber-50/50' : ''}`}>
+                        <div className="font-semibold text-slate-500">Bags Count</div>
+                        <div className="font-mono text-slate-700 font-bold">{selectedTx.bags} Bags</div>
+                        <div className="font-mono text-slate-800 font-bold flex flex-wrap items-center gap-1">
+                          <span>{bagWeights.length} Bags</span>
+                          {isBagsMismatch && (
+                            <span className="text-[9px] sm:text-[10px] text-amber-700 bg-amber-100 px-1 py-0.2 rounded font-sans font-bold">
+                              Edited ({bagWeights.length - selectedTx.bags > 0 ? '+' : ''}{bagWeights.length - selectedTx.bags})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Rate / Amount Confirmation */}
+                      <div className={`grid grid-cols-3 p-2 sm:p-3 items-center text-[11px] sm:text-xs ${isRateMismatch ? 'bg-amber-50/50' : ''}`}>
+                        <div className="font-semibold text-slate-500">Rate / Bag</div>
+                        <div className="font-mono text-slate-700 font-bold">{formatINR(selectedTx.rate)}</div>
+                        <div>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            value={confirmedRate}
+                            onChange={(e) => setConfirmedRate(e.target.value)}
+                            className="w-full px-2 py-1 bg-white border border-slate-200 focus:border-emerald-500 rounded text-xs font-mono font-bold"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Mark Confirmation - Always editable */}
+                      <div className={`grid grid-cols-3 p-2 sm:p-3 items-center text-[11px] sm:text-xs ${isMarkMismatch ? 'bg-amber-50/50' : ''}`}>
+                        <div className="font-semibold text-slate-500">Brand / Mark</div>
+                        <div className="font-bold text-slate-700 uppercase">{selectedTx.mark}</div>
+                        <div>
+                          <select
+                            value={confirmedMark}
+                            onChange={(e) => setConfirmedMark(e.target.value)}
+                            className="w-full px-2 py-1 bg-white border border-slate-200 focus:border-emerald-500 rounded text-xs font-bold uppercase cursor-pointer"
+                          >
+                            {(currentTenant?.marks || []).map((m) => (
+                              <option key={m} value={m}>
+                                {m}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                    </div>
                   </div>
-                  <div className="divide-y divide-slate-100">
-                    
-                    {/* Bags Comparison */}
-                    <div className={`grid grid-cols-3 p-2 sm:p-3 items-center text-[11px] sm:text-xs ${isBagsMismatch ? 'bg-amber-50/50' : ''}`}>
-                      <div className="font-semibold text-slate-500">Bags Count</div>
-                      <div className="font-mono text-slate-700 font-bold">{selectedTx.bags} Bags</div>
-                      <div className="font-mono text-slate-800 font-bold flex flex-wrap items-center gap-1">
-                        <span>{bagWeights.length} Bags</span>
-                        {isBagsMismatch && (
-                          <span className="text-[9px] sm:text-[10px] text-amber-700 bg-amber-100 px-1 py-0.2 rounded font-sans font-bold">
-                            Edited ({bagWeights.length - selectedTx.bags > 0 ? '+' : ''}{bagWeights.length - selectedTx.bags})
-                          </span>
-                        )}
-                      </div>
-                    </div>
 
-                    {/* Rate / Amount Confirmation */}
-                    <div className={`grid grid-cols-3 p-2 sm:p-3 items-center text-[11px] sm:text-xs ${isRateMismatch ? 'bg-amber-50/50' : ''}`}>
-                      <div className="font-semibold text-slate-500">Rate / Bag</div>
-                      <div className="font-mono text-slate-700 font-bold">{formatINR(selectedTx.rate)}</div>
+                  {/* Rate reason block if changed */}
+                  {isRateMismatch && (
+                    <div className="space-y-1.5 animate-fade-in bg-amber-50/40 p-3 rounded-xl border border-amber-200/50">
+                      <label className="block text-[11px] font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1">
+                        <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
+                        <span>Select Rate Modification Reason</span>
+                      </label>
+                      <select
+                        value={rateReason}
+                        onChange={(e) => setRateReason(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl text-xs font-medium cursor-pointer"
+                      >
+                        <option value="">-- Choose Reason --</option>
+                        <option value="Low Quality">Low Quality</option>
+                        <option value="Small Size">Small Size</option>
+                        <option value="Bag Weights low">Bag Weights low</option>
+                        <option value="Dark color">Dark color</option>
+                        <option value="More white chillies">More white chillies</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Discrepancy warning banner */}
+                  {hasAnyMismatch ? (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex gap-2.5 text-xs text-amber-900 leading-normal font-medium">
+                      <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
                       <div>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0.01"
-                          value={confirmedRate}
-                          onChange={(e) => setConfirmedRate(e.target.value)}
-                          className="w-full px-2 py-1 bg-white border border-slate-200 focus:border-emerald-500 rounded text-xs font-mono font-bold"
-                        />
+                        <p className="font-bold">Ledger Discrepancy Detected</p>
+                        <p className="text-[10px] text-amber-700 mt-0.5">
+                          You have modified parameters originally submitted by the Owner. A re-confirmation overrides click is strictly required to save updates to the master grid.
+                        </p>
                       </div>
                     </div>
-
-                    {/* Mark Confirmation - Always editable */}
-                    <div className={`grid grid-cols-3 p-2 sm:p-3 items-center text-[11px] sm:text-xs ${isMarkMismatch ? 'bg-amber-50/50' : ''}`}>
-                      <div className="font-semibold text-slate-500">Brand / Mark</div>
-                      <div className="font-bold text-slate-700 uppercase">{selectedTx.mark}</div>
-                      <div>
-                        <select
-                          value={confirmedMark}
-                          onChange={(e) => setConfirmedMark(e.target.value)}
-                          className="w-full px-2 py-1 bg-white border border-slate-200 focus:border-emerald-500 rounded text-xs font-bold uppercase cursor-pointer"
-                        >
-                          {(currentTenant?.marks || []).map((m) => (
-                            <option key={m} value={m}>
-                              {m}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                  ) : (
+                    <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl flex gap-2.5 text-xs text-emerald-800 leading-normal font-semibold">
+                      <Check className="h-5 w-5 text-emerald-600 shrink-0" />
+                      <span>All verified metrics match the Owner's original ledger entry perfectly.</span>
                     </div>
-
-                  </div>
+                  )}
                 </div>
 
-                {/* Rate reason block if changed */}
-                {isRateMismatch && (
-                  <div className="space-y-1.5 animate-fade-in bg-amber-50/40 p-3 rounded-xl border border-amber-200/50">
-                    <label className="block text-[11px] font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1">
-                      <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
-                      <span>Select Rate Modification Reason</span>
-                    </label>
-                    <select
-                      value={rateReason}
-                      onChange={(e) => setRateReason(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-amber-300 rounded-xl text-xs font-medium cursor-pointer"
-                    >
-                      <option value="">-- Choose Reason --</option>
-                      <option value="Low Quality">Low Quality</option>
-                      <option value="Small Size">Small Size</option>
-                      <option value="Bag Weights low">Bag Weights low</option>
-                      <option value="Dark color">Dark color</option>
-                      <option value="More white chillies">More white chillies</option>
-                    </select>
-                  </div>
-                )}
-
-                {/* Discrepancy warning banner */}
-                {hasAnyMismatch ? (
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex gap-2.5 text-xs text-amber-900 leading-normal font-medium">
-                    <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-bold">Ledger Discrepancy Detected</p>
-                      <p className="text-[10px] text-amber-700 mt-0.5">
-                        You have modified parameters originally submitted by the Owner. A re-confirmation overrides click is strictly required to save updates to the master grid.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl flex gap-2.5 text-xs text-emerald-800 leading-normal font-semibold">
-                    <Check className="h-5 w-5 text-emerald-600 shrink-0" />
-                    <span>All verified metrics match the Owner's original ledger entry perfectly.</span>
-                  </div>
-                )}
-
-                {/* Buttons block */}
-                <div className="flex gap-2 pt-2 border-t border-slate-100">
+                {/* Pinned Action Footer */}
+                <div className="p-3.5 sm:p-5 bg-white border-t border-slate-100 shrink-0 shadow-xs flex gap-2">
                   <button
                     type="button"
                     onClick={() => setStep('entry')}
                     disabled={isSaving}
-                    className="flex-1 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold transition-all"
+                    className="flex-1 py-2.5 sm:py-3 border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold transition-all cursor-pointer"
                   >
                     Back to Entry
                   </button>
@@ -1216,7 +1247,7 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
                     type="button"
                     onClick={handleConfirmSave}
                     disabled={isSaving || (isRateMismatch && !rateReason)}
-                    className={`flex-1 py-2.5 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-md ${
+                    className={`flex-1 py-2.5 sm:py-3 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-md cursor-pointer ${
                       hasAnyMismatch
                         ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/10'
                         : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/10'
@@ -1231,7 +1262,6 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
                     )}
                   </button>
                 </div>
-
               </div>
             )}
 
