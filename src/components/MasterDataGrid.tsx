@@ -301,7 +301,8 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
 
       {/* Sticky Filter Panel */}
       <div className="sticky top-14 sm:top-16 z-20 bg-white p-3 sm:p-4 rounded-2xl shadow-soft border border-slate-100/80 backdrop-blur-md space-y-3">
-        <div className="flex flex-col md:flex-row gap-2.5 sm:gap-3">
+        {/* Row 1: Search, Mark Filter, and Print Ledger Action */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3">
           {/* Search Input */}
           <div className="relative flex-grow">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -315,7 +316,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
           </div>
           
           {/* Mark Select Dropdown */}
-          <div className="relative w-full md:w-48">
+          <div className="relative w-full sm:w-48">
             <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <select
               value={selectedMark}
@@ -332,183 +333,16 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
             </div>
           </div>
 
-        {/* Date Range Picker Dropdown */}
-        <div className="relative w-full md:w-60">
+          {/* Print Master Ledger Button */}
           <button
             type="button"
-            onClick={() => setIsCalendarOpen(!isCalendarOpen)}
-            className="w-full flex items-center justify-between pl-10 pr-3 py-2 sm:py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 text-sm font-medium cursor-pointer text-left text-slate-700 select-none relative"
+            onClick={handlePrintLedger}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/90 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-2xs cursor-pointer shrink-0"
+            title="Print Filtered Master Ledger Report"
           >
-            <CalendarIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <span className="truncate pr-4 text-xs sm:text-sm">
-              {startDate && endDate
-                ? `${startDate} to ${endDate}`
-                : startDate
-                  ? `From ${startDate}`
-                  : endDate
-                    ? `Until ${endDate}`
-                    : 'Select Date Range'}
-            </span>
-            <span className="text-[9px] bg-indigo-50 text-indigo-800 px-1.5 py-0.5 rounded font-bold uppercase shrink-0 border border-indigo-100/50">Range</span>
+            <Printer className="h-4 w-4 text-indigo-600" />
+            <span>Print Ledger</span>
           </button>
-
-          {isCalendarOpen && (
-            <>
-              {/* Click outside tap overlay */}
-              <div className="fixed inset-0 z-10 cursor-default" onClick={() => setIsCalendarOpen(false)} />
-              
-              <div className="absolute left-0 right-0 sm:right-auto sm:left-0 mt-2 z-30 bg-white border border-slate-200 rounded-2xl shadow-xl p-3 sm:p-4 w-full sm:w-72 space-y-3 animate-fade-in select-none">
-                {/* Calendar Month Header */}
-                <div className="flex justify-between items-center text-xs font-bold text-slate-700">
-                  <button
-                    type="button"
-                    onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}
-                    className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-all font-mono"
-                  >
-                    &larr;
-                  </button>
-                  <span>
-                    {calendarMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}
-                    className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-all font-mono"
-                  >
-                    &rarr;
-                  </button>
-                </div>
-
-                {/* Day Labels */}
-                <div className="grid grid-cols-7 gap-1 text-[10px] text-center font-bold text-slate-400 uppercase tracking-wider">
-                  <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
-                </div>
-
-                {/* Day Cells Grid */}
-                <div className="grid grid-cols-7 gap-1 text-xs">
-                  {(() => {
-                    const getDaysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
-                    const getFirstDayOfMonth = (y: number, m: number) => new Date(y, m, 1).getDay();
-
-                    const year = calendarMonth.getFullYear();
-                    const month = calendarMonth.getMonth();
-                    const totalDays = getDaysInMonth(year, month);
-                    const startOffset = getFirstDayOfMonth(year, month);
-                    const cells = [];
-
-                    // Empty pads for week start offset
-                    for (let i = 0; i < startOffset; i++) {
-                      cells.push(<div key={`pad-${i}`} className="w-8 h-8" />);
-                    }
-
-                    // Day cells
-                    for (let day = 1; day <= totalDays; day++) {
-                      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                      const hasTx = transactions.some(t => t.date === dateStr);
-                      const isSelectedStart = startDate === dateStr;
-                      const isSelectedEnd = endDate === dateStr;
-                      const isWithinRange = !!(startDate && endDate && dateStr > startDate && dateStr < endDate);
-
-                      // Select Date Action
-                      const handleSelectDate = () => {
-                        if (!startDate || (startDate && endDate)) {
-                          setStartDate(dateStr);
-                          setEndDate('');
-                        } else if (dateStr < startDate) {
-                          setStartDate(dateStr);
-                          setEndDate('');
-                        } else {
-                          setEndDate(dateStr);
-                          setIsCalendarOpen(false); // Close calendar on selecting end date
-                        }
-                      };
-
-                      let cellStyle = 'hover:bg-slate-100 text-slate-700';
-                      if (isSelectedStart || isSelectedEnd) {
-                        cellStyle = 'bg-emerald-600 text-white font-bold rounded-lg shadow-sm shadow-emerald-600/10';
-                      } else if (isWithinRange) {
-                        cellStyle = 'bg-emerald-50 text-emerald-800 font-semibold rounded-none';
-                      } else if (hasTx) {
-                        // Highlight dates with transactions in distinct light-indigo background with border
-                        cellStyle = 'bg-indigo-50/80 text-indigo-900 border border-indigo-100/50 hover:bg-indigo-100 rounded-lg';
-                      }
-
-                      cells.push(
-                        <button
-                          key={dateStr}
-                          type="button"
-                          onClick={handleSelectDate}
-                          className={`w-8 h-8 flex flex-col items-center justify-center relative transition-all duration-150 rounded-lg font-mono text-[11px] ${cellStyle}`}
-                          title={hasTx ? 'Contains transactions' : undefined}
-                        >
-                          <span>{day}</span>
-                          {/* Transaction small dot indicator */}
-                          {hasTx && !isSelectedStart && !isSelectedEnd && !isWithinRange && (
-                            <span className="w-1 h-1 bg-indigo-500 rounded-full absolute bottom-1" />
-                          )}
-                        </button>
-                      );
-                    }
-                    return cells;
-                  })()}
-                </div>
-
-                {/* Preset quick buttons */}
-                <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-100 text-[10px] font-bold">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStartDate('');
-                      setEndDate('');
-                      setIsCalendarOpen(false);
-                    }}
-                    className="px-2 py-1 bg-slate-100 text-slate-600 rounded hover:bg-slate-200 transition-all cursor-pointer"
-                  >
-                    Clear Filter
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const today = new Date();
-                      const dateStr = today.toISOString().split('T')[0];
-                      setStartDate(dateStr);
-                      setEndDate(dateStr);
-                      setIsCalendarOpen(false);
-                    }}
-                    className="px-2 py-1 bg-emerald-50 text-emerald-800 rounded hover:bg-emerald-100 transition-all cursor-pointer"
-                  >
-                    Today
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const now = new Date();
-                      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-                      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-                      setStartDate(firstDay);
-                      setEndDate(lastDay);
-                      setIsCalendarOpen(false);
-                    }}
-                    className="px-2 py-1 bg-indigo-50 text-indigo-800 rounded hover:bg-indigo-100 transition-all cursor-pointer"
-                  >
-                    This Month
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Print Master Ledger Button */}
-        <button
-          type="button"
-          onClick={handlePrintLedger}
-          className="flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/90 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-2xs cursor-pointer shrink-0"
-          title="Print Filtered Master Ledger Report"
-        >
-          <Printer className="h-4 w-4 text-indigo-600" />
-          <span>Print Ledger</span>
-        </button>
 
           {/* Clear Filters Button */}
           {(searchTerm || selectedMark || selectedSubUser !== 'all' || startDate || endDate) && (
@@ -520,11 +354,236 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                 setStartDate('');
                 setEndDate('');
               }}
-              className="px-4 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer whitespace-nowrap self-center"
+              className="px-3 py-2 text-xs sm:text-sm font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer whitespace-nowrap self-center shrink-0"
             >
               Clear Filters
             </button>
           )}
+        </div>
+
+        {/* Row 2: Date Range Filter (Visible Clearly and Fully on Its Own Line) */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 pt-2.5 border-t border-slate-100">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0">
+            <CalendarIcon className="h-4 w-4 text-indigo-600" />
+            <span>Date Range:</span>
+          </div>
+
+          {/* Date Range Picker Dropdown */}
+          <div className="relative w-full sm:w-auto min-w-[280px] sm:min-w-[340px] md:min-w-[380px]">
+            <button
+              type="button"
+              onClick={() => setIsCalendarOpen(!isCalendarOpen)}
+              className="w-full flex items-center justify-between pl-10 pr-3.5 py-2 sm:py-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 text-xs sm:text-sm font-medium cursor-pointer text-left text-slate-800 select-none relative transition-colors shadow-2xs"
+            >
+              <CalendarIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-indigo-600" />
+              <span className="font-semibold text-slate-800 pr-3 font-mono">
+                {startDate && endDate
+                  ? `${startDate}  ➔  ${endDate}`
+                  : startDate
+                    ? `From ${startDate}`
+                    : endDate
+                      ? `Until ${endDate}`
+                      : 'Select Date Range'}
+              </span>
+              <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase shrink-0 border border-indigo-200/80">
+                {startDate && endDate ? 'Active' : 'Range'}
+              </span>
+            </button>
+
+            {isCalendarOpen && (
+              <>
+                {/* Click outside tap overlay */}
+                <div className="fixed inset-0 z-10 cursor-default" onClick={() => setIsCalendarOpen(false)} />
+                
+                <div className="absolute left-0 right-0 sm:right-auto sm:left-0 mt-2 z-30 bg-white border border-slate-200 rounded-2xl shadow-xl p-3 sm:p-4 w-full sm:w-72 space-y-3 animate-fade-in select-none">
+                  {/* Calendar Month Header */}
+                  <div className="flex justify-between items-center text-xs font-bold text-slate-700">
+                    <button
+                      type="button"
+                      onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}
+                      className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-all font-mono"
+                    >
+                      &larr;
+                    </button>
+                    <span>
+                      {calendarMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}
+                      className="p-1 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-all font-mono"
+                    >
+                      &rarr;
+                    </button>
+                  </div>
+
+                  {/* Day Labels */}
+                  <div className="grid grid-cols-7 gap-1 text-[10px] text-center font-bold text-slate-400 uppercase tracking-wider">
+                    <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                  </div>
+
+                  {/* Day Cells Grid */}
+                  <div className="grid grid-cols-7 gap-1 text-xs">
+                    {(() => {
+                      const getDaysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
+                      const getFirstDayOfMonth = (y: number, m: number) => new Date(y, m, 1).getDay();
+
+                      const year = calendarMonth.getFullYear();
+                      const month = calendarMonth.getMonth();
+                      const totalDays = getDaysInMonth(year, month);
+                      const startOffset = getFirstDayOfMonth(year, month);
+                      const cells = [];
+
+                      // Empty pads for week start offset
+                      for (let i = 0; i < startOffset; i++) {
+                        cells.push(<div key={`pad-${i}`} className="w-8 h-8" />);
+                      }
+
+                      // Day cells
+                      for (let day = 1; day <= totalDays; day++) {
+                        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                        const hasTx = transactions.some(t => t.date === dateStr);
+                        const isSelectedStart = startDate === dateStr;
+                        const isSelectedEnd = endDate === dateStr;
+                        const isWithinRange = !!(startDate && endDate && dateStr > startDate && dateStr < endDate);
+
+                        // Select Date Action
+                        const handleSelectDate = () => {
+                          if (!startDate || (startDate && endDate)) {
+                            setStartDate(dateStr);
+                            setEndDate('');
+                          } else if (dateStr < startDate) {
+                            setStartDate(dateStr);
+                            setEndDate('');
+                          } else {
+                            setEndDate(dateStr);
+                            setIsCalendarOpen(false); // Close calendar on selecting end date
+                          }
+                        };
+
+                        let cellStyle = 'hover:bg-slate-100 text-slate-700';
+                        if (isSelectedStart || isSelectedEnd) {
+                          cellStyle = 'bg-emerald-600 text-white font-bold rounded-lg shadow-sm shadow-emerald-600/10';
+                        } else if (isWithinRange) {
+                          cellStyle = 'bg-emerald-50 text-emerald-800 font-semibold rounded-none';
+                        } else if (hasTx) {
+                          // Highlight dates with transactions in distinct light-indigo background with border
+                          cellStyle = 'bg-indigo-50/80 text-indigo-900 border border-indigo-100/50 hover:bg-indigo-100 rounded-lg';
+                        }
+
+                        cells.push(
+                          <button
+                            key={dateStr}
+                            type="button"
+                            onClick={handleSelectDate}
+                            className={`w-8 h-8 flex flex-col items-center justify-center relative transition-all duration-150 rounded-lg font-mono text-[11px] ${cellStyle}`}
+                            title={hasTx ? 'Contains transactions' : undefined}
+                          >
+                            <span>{day}</span>
+                            {/* Transaction small dot indicator */}
+                            {hasTx && !isSelectedStart && !isSelectedEnd && !isWithinRange && (
+                              <span className="w-1 h-1 bg-indigo-500 rounded-full absolute bottom-1" />
+                            )}
+                          </button>
+                        );
+                      }
+                      return cells;
+                    })()}
+                  </div>
+
+                  {/* Preset quick buttons inside dropdown */}
+                  <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-100 text-[10px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStartDate('');
+                        setEndDate('');
+                        setIsCalendarOpen(false);
+                      }}
+                      className="px-2 py-1 bg-slate-100 text-slate-600 rounded hover:bg-slate-200 transition-all cursor-pointer"
+                    >
+                      Clear Filter
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const today = new Date();
+                        const dateStr = today.toISOString().split('T')[0];
+                        setStartDate(dateStr);
+                        setEndDate(dateStr);
+                        setIsCalendarOpen(false);
+                      }}
+                      className="px-2 py-1 bg-emerald-50 text-emerald-800 rounded hover:bg-emerald-100 transition-all cursor-pointer"
+                    >
+                      Today
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const now = new Date();
+                        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+                        setStartDate(firstDay);
+                        setEndDate(lastDay);
+                        setIsCalendarOpen(false);
+                      }}
+                      className="px-2 py-1 bg-indigo-50 text-indigo-800 rounded hover:bg-indigo-100 transition-all cursor-pointer"
+                    >
+                      This Month
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Quick Date Range Preset Buttons directly on the line */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                const today = new Date();
+                const dateStr = today.toISOString().split('T')[0];
+                setStartDate(dateStr);
+                setEndDate(dateStr);
+                setIsCalendarOpen(false);
+              }}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                startDate === getTodayISTString() && endDate === getTodayISTString()
+                  ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+              }`}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const now = new Date();
+                const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+                setStartDate(firstDay);
+                setEndDate(lastDay);
+                setIsCalendarOpen(false);
+              }}
+              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-semibold transition-all cursor-pointer"
+            >
+              This Month
+            </button>
+            {(startDate || endDate) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStartDate('');
+                  setEndDate('');
+                }}
+                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1"
+                title="Reset Date Range"
+              >
+                <span>Clear Date</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Sub-User Fast Filter Chips */}
