@@ -167,8 +167,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const availableMarks = useMemo(() => {
     const fromTenant = tenant?.marks || currentTenant?.marks || branchMarks || [];
     const fromTxs = transactions.map(t => t.mark).filter(Boolean);
+    const defaults = ['AD', 'Agro', 'BRT', 'RS', 'TS', 'DV', 'BVB'];
     const set = new Set<string>();
-    [...fromTenant, ...fromTxs].forEach(m => {
+    [...fromTenant, ...fromTxs, ...defaults].forEach(m => {
       const clean = (m || '').trim().toUpperCase();
       if (clean) set.add(clean);
     });

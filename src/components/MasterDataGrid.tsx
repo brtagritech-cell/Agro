@@ -110,17 +110,18 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
     return res;
   };
 
-  // Dynamic available marks from current transactions
+  // Dynamic available marks from current transactions and tenant configuration
   const availableMarks = useMemo(() => {
     const set = new Set<string>();
-    transactions.forEach(tx => {
-      if (tx.mark && tx.mark.trim()) set.add(tx.mark.trim());
+    (currentTenant?.marks || []).forEach(m => {
+      if (m && m.trim()) set.add(m.trim().toUpperCase());
     });
-    if (set.size === 0) {
-      ['Agro', 'BRT', 'RS', 'TS', 'DV', 'BVB'].forEach(m => set.add(m));
-    }
+    ['AD', 'Agro', 'BRT', 'RS', 'TS', 'DV', 'BVB'].forEach(m => set.add(m));
+    transactions.forEach(tx => {
+      if (tx.mark && tx.mark.trim()) set.add(tx.mark.trim().toUpperCase());
+    });
     return Array.from(set).sort();
-  }, [transactions]);
+  }, [transactions, currentTenant]);
 
   // Dynamic available agents from transactions and tenant configuration
   const availableAgents = useMemo(() => {
