@@ -17,6 +17,7 @@ import {
 import { LogOut, LayoutDashboard, FileSpreadsheet, CheckCircle, AlertTriangle, X, Zap } from 'lucide-react';
 import { AdminDashboard } from './components/AdminDashboard';
 import { SupabaseConnectModal } from './components/SupabaseConnectModal';
+import { LogoutConfirmModal } from './components/LogoutConfirmModal';
 
 const getSubRouteStorageKey = (prefix: string) => {
   const subUrl = getCurrentSubUrl();
@@ -39,6 +40,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'ledger'>('dashboard');
   const [isAdminView, setIsAdminView] = useState<boolean>(false);
   const [isDbModalOpen, setIsDbModalOpen] = useState<boolean>(false);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState<boolean>(false);
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -138,6 +140,15 @@ function App() {
     sessionStorage.removeItem(roleKey);
     sessionStorage.removeItem(userKey);
     setActiveTab('dashboard');
+  };
+
+  const handleRequestLogout = () => {
+    setIsLogoutModalOpen(true);
+  };
+
+  const handleConfirmLogout = () => {
+    setIsLogoutModalOpen(false);
+    handleLogout();
   };
 
   const handleEnterAdmin = () => {
@@ -286,11 +297,17 @@ function App() {
             onUpdateWeight={handleUpdateWeight}
             onRefresh={loadData}
             isLoading={isLoading}
-            onLogout={handleLogout}
+            onLogout={handleRequestLogout}
             subUserName={subUserName}
           />
         </div>
         {renderToast()}
+        <LogoutConfirmModal
+          isOpen={isLogoutModalOpen}
+          onClose={() => setIsLogoutModalOpen(false)}
+          onConfirm={handleConfirmLogout}
+          roleName={subUserName ? `Sub-User: ${subUserName}` : 'Sub-User'}
+        />
       </div>
     );
   }
@@ -384,7 +401,7 @@ function App() {
 
             {/* Log Out */}
             <button
-              onClick={handleLogout}
+              onClick={handleRequestLogout}
               className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 text-xs sm:text-sm font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all border border-transparent hover:border-rose-100 shrink-0"
               title="Log Out"
             >
@@ -457,7 +474,7 @@ function App() {
 
         <button
           type="button"
-          onClick={handleLogout}
+          onClick={handleRequestLogout}
           className="flex flex-col items-center justify-center py-1.5 px-3 rounded-xl text-slate-400 hover:text-rose-600 font-medium transition-all app-tap min-w-[64px]"
         >
           <LogOut className="h-5 w-5" />
@@ -470,6 +487,14 @@ function App() {
         isOpen={isDbModalOpen}
         onClose={() => setIsDbModalOpen(false)}
         onConnected={loadData}
+      />
+
+      {/* Logout Confirmation Modal */}
+      <LogoutConfirmModal
+        isOpen={isLogoutModalOpen}
+        onClose={() => setIsLogoutModalOpen(false)}
+        onConfirm={handleConfirmLogout}
+        roleName="Owner Portal"
       />
 
       {/* Footer (Desktop / Tablet) */}

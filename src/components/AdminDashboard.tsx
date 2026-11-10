@@ -27,6 +27,7 @@ import {
   normalizeSubUrl 
 } from '../services/sheetService';
 import { SupabaseConnectModal } from './SupabaseConnectModal';
+import { LogoutConfirmModal } from './LogoutConfirmModal';
 import { getSupabaseCredentials } from '../services/supabaseClient';
 
 interface AdminDashboardProps {
@@ -41,6 +42,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
   const [adminUser, setAdminUser] = useState('');
   const [adminPass, setAdminPass] = useState('');
   const [authError, setAuthError] = useState('');
+  const [isAdminLogoutModalOpen, setIsAdminLogoutModalOpen] = useState(false);
 
   // Config states
   const [tenants, setTenants] = useState<TenantConfig[]>([]);
@@ -614,8 +616,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
               View Client App
             </button>
             <button
-              onClick={handleAdminLogout}
-              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 text-xs font-bold text-indigo-200 hover:text-white rounded-xl transition-all"
+              onClick={() => setIsAdminLogoutModalOpen(true)}
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 text-xs font-bold text-indigo-200 hover:text-white rounded-xl transition-all cursor-pointer"
             >
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">Logout</span>
@@ -1307,6 +1309,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
         isOpen={isSupabaseModalOpen}
         onClose={() => setIsSupabaseModalOpen(false)}
         onConnected={() => setSupabaseCreds(getSupabaseCredentials())}
+      />
+
+      {/* Logout Confirmation Modal */}
+      <LogoutConfirmModal
+        isOpen={isAdminLogoutModalOpen}
+        onClose={() => setIsAdminLogoutModalOpen(false)}
+        onConfirm={() => {
+          setIsAdminLogoutModalOpen(false);
+          handleAdminLogout();
+        }}
+        title="Confirm Admin Logout"
+        message="Are you sure you want to log out of the Master Admin panel?"
+        roleName="Master Admin"
       />
     </div>
   );
