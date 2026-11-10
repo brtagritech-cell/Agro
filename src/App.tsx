@@ -3,7 +3,17 @@ import { LoginScreen } from './components/LoginScreen';
 import { OwnerDashboard } from './components/OwnerDashboard';
 import { MasterDataGrid } from './components/MasterDataGrid';
 import { SubUserDashboard } from './components/SubUserDashboard';
-import { fetchTransactions, addTransaction, updateWeight, setScriptUrl, getCurrentSubUrl, getCurrentTenant, type Transaction } from './services/sheetService';
+import { 
+  fetchTransactions, 
+  addTransaction, 
+  updateWeight, 
+  deleteTransaction, 
+  editTransaction, 
+  setScriptUrl, 
+  getCurrentSubUrl, 
+  getCurrentTenant, 
+  type Transaction 
+} from './services/sheetService';
 import { LogOut, LayoutDashboard, FileSpreadsheet, CheckCircle, AlertTriangle, X, Zap } from 'lucide-react';
 import { AdminDashboard } from './components/AdminDashboard';
 import { SupabaseConnectModal } from './components/SupabaseConnectModal';
@@ -200,6 +210,30 @@ function App() {
     return result;
   };
 
+  const handleDeleteTransaction = async (txId: string) => {
+    setIsLoading(true);
+    const result = await deleteTransaction(txId);
+    await loadData();
+    setIsLoading(false);
+    setToast({
+      message: result.message,
+      type: result.success ? 'success' : 'error'
+    });
+    return result;
+  };
+
+  const handleEditTransaction = async (originalTxId: string, updatedData: Partial<Transaction>) => {
+    setIsLoading(true);
+    const result = await editTransaction(originalTxId, updatedData);
+    await loadData();
+    setIsLoading(false);
+    setToast({
+      message: result.message,
+      type: result.success ? 'success' : 'error'
+    });
+    return result;
+  };
+
   const renderToast = () => {
     if (!toast) return null;
     return (
@@ -368,6 +402,8 @@ function App() {
             transactions={transactions}
             onAddTransaction={handleAddTransaction}
             onUpdateWeight={handleUpdateWeight}
+            onDeleteTransaction={handleDeleteTransaction}
+            onEditTransaction={handleEditTransaction}
             onTabChange={setActiveTab}
             onRefresh={loadData}
           />
@@ -376,6 +412,8 @@ function App() {
             transactions={transactions}
             onRefresh={loadData}
             isLoading={isLoading}
+            onDeleteTransaction={handleDeleteTransaction}
+            onEditTransaction={handleEditTransaction}
           />
         )}
       </main>

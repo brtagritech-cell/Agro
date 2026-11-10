@@ -17,7 +17,9 @@ import {
   AlertCircle,
   Save,
   ChevronDown,
-  Check
+  Check,
+  Scale,
+  Pencil
 } from 'lucide-react';
 import { 
   type Transaction, 
@@ -25,9 +27,14 @@ import {
   isGoogleSheetsEnabled, 
   getCurrentTenant, 
   updateBranchConfiguration,
-  type TenantConfig
+  type TenantConfig,
+  isWeightPending,
+  deleteTransaction as defaultDeleteTx,
+  editTransaction as defaultEditTx
 } from '../services/sheetService';
 import { ViewWeightDetailsModal } from './ViewWeightDetailsModal';
+import { EditTransactionModal } from './EditTransactionModal';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { SupabaseConnectModal } from './SupabaseConnectModal';
 
 const getTodayISTString = (): string => {
@@ -65,14 +72,18 @@ interface OwnerDashboardProps {
   ) => Promise<{ success: boolean; message: string }>;
   onTabChange: (tab: 'dashboard' | 'ledger') => void;
   onRefresh?: () => void;
+  onDeleteTransaction?: (txId: string) => Promise<{ success: boolean; message: string }>;
+  onEditTransaction?: (originalTxId: string, updatedData: Partial<Transaction>) => Promise<{ success: boolean; message: string }>;
 }
 
 export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   transactions,
   onAddTransaction,
-  onUpdateWeight,
+  onUpdateWeight: _onUpdateWeight,
   onTabChange,
-  onRefresh
+  onRefresh,
+  onDeleteTransaction,
+  onEditTransaction
 }) => {
   const [tenant, setTenant] = useState<TenantConfig>(() => getCurrentTenant());
   const currentTenant = tenant;
@@ -406,6 +417,30 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   
   // Reusable weight details view state
   const [viewingTx, setViewingTx] = useState<Transaction | null>(null);
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [deletingTx, setDeletingTx] = useState<Transaction | null>(null);
+
+  const handleDeleteConfirm = async (txId: string) => {
+    if (onDeleteTransaction) {
+      const res = await onDeleteTransaction(txId);
+      if (res.success && onRefresh) onRefresh();
+      return res;
+    }
+    const res = await defaultDeleteTx(txId);
+    if (res.success && onRefresh) onRefresh();
+    return res;
+  };
+
+  const handleEditSave = async (originalTxId: string, updatedData: Partial<Transaction>) => {
+    if (onEditTransaction) {
+      const res = await onEditTransaction(originalTxId, updatedData);
+      if (res.success && onRefresh) onRefresh();
+      return res;
+    }
+    const res = await defaultEditTx(originalTxId, updatedData);
+    if (res.success && onRefresh) onRefresh();
+    return res;
+  };
   
   // Lot conflict states
   const [conflictTransaction, setConflictTransaction] = useState<Transaction | null>(null);
@@ -895,26 +930,37 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                     <div className="flex justify-between items-center mt-1 border-t border-slate-200/30 pt-1.5">
                       <span className="text-[10px] text-slate-400">LOT {tx.lot}</span>
                       <div className="flex items-center gap-1.5">
-                        {(!tx.weight || tx.weight.trim() === '') && (
+                        {isWeightPending(tx) ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setEditingTx(tx)}
+                              className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/90 font-bold text-[10px] rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                              title="Edit Pending Transaction"
+                            >
+                              <Pencil className="h-3 w-3 text-amber-700" />
+                              <span>Edit</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingTx(tx)}
+                              className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/90 font-bold text-[10px] rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                              title="Delete Pending Transaction"
+                            >
+                              <Trash2 className="h-3 w-3 text-rose-600" />
+                              <span>Delete</span>
+                            </button>
+                          </>
+                        ) : (
                           <button
                             type="button"
-                            onClick={async () => {
-                              if (window.confirm(`Are you sure you want to archive transaction ${tx.transactionId}?`)) {
-                                await onUpdateWeight(tx.transactionId, "Archived");
-                              }
-                            }}
-                            className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-600 font-bold text-[10px] rounded-lg transition-all"
+                            onClick={() => setViewingTx(tx)}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg transition-all shadow-xs flex items-center gap-1 cursor-pointer"
                           >
-                            Archive
+                            <Scale className="h-3 w-3" />
+                            <span>View Details</span>
                           </button>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => setViewingTx(tx)}
-                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg transition-all shadow-sm"
-                        >
-                          View Details
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -1380,6 +1426,28 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
           onClose={() => setViewingTx(null)}
           onUpdate={onRefresh}
           allowPrint={true}
+        />
+      )}
+
+      {/* Edit Pending Transaction Modal */}
+      {editingTx && (
+        <EditTransactionModal
+          isOpen={!!editingTx}
+          transaction={editingTx}
+          onClose={() => setEditingTx(null)}
+          onSave={handleEditSave}
+          availableMarks={tenant?.marks || currentTenant?.marks || ['Agro', 'BRT', 'RS', 'TS', 'DV', 'BVB']}
+          availableAgents={availableAgents}
+        />
+      )}
+
+      {/* Delete Pending Transaction Confirmation Modal */}
+      {deletingTx && (
+        <DeleteConfirmModal
+          isOpen={!!deletingTx}
+          transaction={deletingTx}
+          onClose={() => setDeletingTx(null)}
+          onConfirm={handleDeleteConfirm}
         />
       )}
 

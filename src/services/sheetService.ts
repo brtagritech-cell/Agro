@@ -868,3 +868,194 @@ export async function updateWeight(
     return { success: false, message: 'Failed to update ledger (network error + local ID missing)' };
   }
 }
+
+/**
+ * Check if a transaction has pending weight status
+ */
+export function isWeightPending(tx: Transaction | null | undefined): boolean {
+  if (!tx) return false;
+  return !tx.weight || !tx.weight.trim() || tx.weight.toLowerCase() === 'pending';
+}
+
+/**
+ * Permanently delete a pending transaction
+ */
+export async function deleteTransaction(
+  transactionId: string
+): Promise<{ success: boolean; message: string }> {
+  // Check if transaction exists and verify weight is pending
+  const txs = getMockTransactions();
+  const existing = txs.find(t => t.transactionId === transactionId);
+  if (existing && !isWeightPending(existing)) {
+    return {
+      success: false,
+      message: 'Only transactions with pending weight status can be deleted.'
+    };
+  }
+
+  // 1. Delete from local storage
+  const updatedTxs = txs.filter(t => t.transactionId !== transactionId);
+  saveMockTransactions(updatedTxs);
+
+  // 2. Delete from Supabase if enabled
+  if (isSupabaseEnabled()) {
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('transaction_id', transactionId);
+
+      if (error) {
+        console.error('Failed to delete transaction from Supabase:', error);
+        return {
+          success: false,
+          message: `Deleted from local cache, but Supabase error: ${error.message}`
+        };
+      }
+      return { success: true, message: `Transaction ${transactionId} deleted successfully.` };
+    } catch (err: any) {
+      console.error('Supabase delete exception:', err);
+      return {
+        success: false,
+        message: `Deleted locally, but database sync error: ${err?.message || 'Delete failed'}`
+      };
+    }
+  }
+
+  return { success: true, message: `Transaction ${transactionId} deleted successfully.` };
+}
+
+/**
+ * Edit a pending transaction
+ */
+export async function editTransaction(
+  originalTransactionId: string,
+  updatedData: Partial<Transaction>
+): Promise<{ success: boolean; message: string; data?: Transaction }> {
+  const txs = getMockTransactions();
+  const existingIndex = txs.findIndex(t => t.transactionId === originalTransactionId);
+  const existing = existingIndex >= 0 ? txs[existingIndex] : null;
+
+  if (existing && !isWeightPending(existing)) {
+    return {
+      success: false,
+      message: 'Only transactions with pending weight status can be edited.'
+    };
+  }
+
+  // Calculate new transaction ID if date, lot, bags, agent, or mark changed
+  const date = updatedData.date || existing?.date || '';
+  const lotVal = String(updatedData.lot !== undefined ? updatedData.lot : (existing?.lot || '')).trim();
+  const bagsVal = updatedData.bags !== undefined ? Number(updatedData.bags) : (existing?.bags || 0);
+  const rateVal = updatedData.rate !== undefined ? Number(updatedData.rate) : (existing?.rate || 0);
+  const agentVal = (updatedData.agent !== undefined ? updatedData.agent : (existing?.agent || '')).trim();
+  const markVal = (updatedData.mark !== undefined ? updatedData.mark : (existing?.mark || '')).trim();
+
+  const [yyyy, mm, dd] = date.split('-');
+  const datePrefix = `${yyyy || ''}${mm || ''}${dd || ''}`;
+  const paddedLot = /^\d+$/.test(lotVal) ? lotVal.padStart(2, '0') : lotVal;
+  const shortAgent = getShortAgentName(agentVal);
+  const newTransactionId = `${datePrefix}-${paddedLot}-${bagsVal}-${shortAgent}-${markVal}`;
+
+  // Check for conflict if transaction ID changed
+  if (newTransactionId !== originalTransactionId) {
+    const conflict = txs.find(t => t.transactionId === newTransactionId && t.transactionId !== originalTransactionId);
+    if (conflict) {
+      return {
+        success: false,
+        message: `A transaction with ID "${newTransactionId}" already exists.`
+      };
+    }
+  }
+
+  const updatedTx: Transaction = {
+    ...(existing || {} as Transaction),
+    ...updatedData,
+    transactionId: newTransactionId,
+    date,
+    lot: lotVal,
+    bags: bagsVal,
+    rate: rateVal,
+    agent: agentVal,
+    mark: markVal,
+    totalValue: isWeightPending(existing) ? 0 : (bagsVal * (existing?.subUserRate || rateVal))
+  };
+
+  // 1. Update in local storage
+  if (existingIndex >= 0) {
+    txs[existingIndex] = updatedTx;
+  } else {
+    txs.push(updatedTx);
+  }
+  saveMockTransactions(txs);
+
+  // 2. Update in Supabase
+  if (isSupabaseEnabled()) {
+    try {
+      const supabaseRow: any = {
+        transaction_id: newTransactionId,
+        date,
+        lot: lotVal,
+        bags: bagsVal,
+        rate: rateVal,
+        agent: agentVal,
+        mark: markVal
+      };
+
+      if (updatedData.rateReason !== undefined) {
+        supabaseRow.rate_reason = updatedData.rateReason;
+      }
+
+      if (newTransactionId !== originalTransactionId) {
+        const { data: oldRow } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('transaction_id', originalTransactionId)
+          .single();
+
+        const fullNewRow = {
+          ...(oldRow || {}),
+          ...supabaseRow,
+          transaction_id: newTransactionId
+        };
+
+        const { error: insertErr } = await supabase
+          .from('transactions')
+          .upsert(fullNewRow, { onConflict: 'transaction_id' });
+
+        if (insertErr) throw insertErr;
+
+        await supabase
+          .from('transactions')
+          .delete()
+          .eq('transaction_id', originalTransactionId);
+      } else {
+        const { error: updateErr } = await supabase
+          .from('transactions')
+          .update(supabaseRow)
+          .eq('transaction_id', originalTransactionId);
+
+        if (updateErr) throw updateErr;
+      }
+
+      return {
+        success: true,
+        message: `Transaction updated successfully.`,
+        data: updatedTx
+      };
+    } catch (err: any) {
+      console.error('Failed to update transaction in Supabase:', err);
+      return {
+        success: true,
+        message: `Updated locally, but Supabase sync error: ${err?.message || 'Sync failed'}`,
+        data: updatedTx
+      };
+    }
+  }
+
+  return {
+    success: true,
+    message: `Transaction updated successfully.`,
+    data: updatedTx
+  };
+}

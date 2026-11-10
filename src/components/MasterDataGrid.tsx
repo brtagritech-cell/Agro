@@ -10,10 +10,20 @@ import {
   User,
   Users,
   Scale,
-  Printer
+  Printer,
+  Pencil,
+  Trash2
 } from 'lucide-react';
-import { type Transaction, getCurrentTenant } from '../services/sheetService';
+import { 
+  type Transaction, 
+  getCurrentTenant, 
+  isWeightPending,
+  deleteTransaction as defaultDeleteTx,
+  editTransaction as defaultEditTx 
+} from '../services/sheetService';
 import { ViewWeightDetailsModal } from './ViewWeightDetailsModal';
+import { EditTransactionModal } from './EditTransactionModal';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 const getTodayISTString = (): string => {
   try {
@@ -39,12 +49,16 @@ interface MasterDataGridProps {
   transactions: Transaction[];
   onRefresh: () => void;
   isLoading: boolean;
+  onDeleteTransaction?: (txId: string) => Promise<{ success: boolean; message: string }>;
+  onEditTransaction?: (originalTxId: string, updatedData: Partial<Transaction>) => Promise<{ success: boolean; message: string }>;
 }
 
 export const MasterDataGrid: React.FC<MasterDataGridProps> = ({ 
   transactions, 
   onRefresh,
-  isLoading 
+  isLoading,
+  onDeleteTransaction,
+  onEditTransaction 
 }) => {
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
@@ -62,6 +76,8 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
   const [viewingTx, setViewingTx] = useState<Transaction | null>(null);
   const [autoPrintSlip, setAutoPrintSlip] = useState(false);
   const [isPrintingLedger, setIsPrintingLedger] = useState(false);
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [deletingTx, setDeletingTx] = useState<Transaction | null>(null);
   const currentTenant = getCurrentTenant();
 
   const handlePrintLedger = () => {
@@ -70,6 +86,28 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
       window.print();
       setIsPrintingLedger(false);
     }, 150);
+  };
+
+  const handleDeleteConfirm = async (txId: string) => {
+    if (onDeleteTransaction) {
+      const res = await onDeleteTransaction(txId);
+      if (res.success) onRefresh();
+      return res;
+    }
+    const res = await defaultDeleteTx(txId);
+    if (res.success) onRefresh();
+    return res;
+  };
+
+  const handleEditSave = async (originalTxId: string, updatedData: Partial<Transaction>) => {
+    if (onEditTransaction) {
+      const res = await onEditTransaction(originalTxId, updatedData);
+      if (res.success) onRefresh();
+      return res;
+    }
+    const res = await defaultEditTx(originalTxId, updatedData);
+    if (res.success) onRefresh();
+    return res;
   };
 
   // Dynamic available marks from current transactions
@@ -83,6 +121,18 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
     }
     return Array.from(set).sort();
   }, [transactions]);
+
+  // Dynamic available agents from transactions and tenant configuration
+  const availableAgents = useMemo(() => {
+    const set = new Set<string>();
+    transactions.forEach(tx => {
+      if (tx.agent && tx.agent.trim()) set.add(tx.agent.trim());
+    });
+    (currentTenant?.agents || []).forEach(a => {
+      if (a && a.trim()) set.add(a.trim());
+    });
+    return Array.from(set).sort();
+  }, [transactions, currentTenant]);
 
   // Dynamic Sub-Users list and lot count statistics
   const subUserStats = useMemo(() => {
@@ -639,29 +689,41 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                 {/* Card Total Value Footer */}
                 <div className="border-t border-slate-100 pt-3 flex justify-between items-center pl-1 sm:pl-2">
                   <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setViewingTx(tx);
-                        setAutoPrintSlip(false);
-                      }}
-                      className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer"
-                    >
-                      <Scale className="h-3.5 w-3.5" />
-                      <span>View Details</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setViewingTx(tx);
-                        setAutoPrintSlip(true);
-                      }}
-                      className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/90 font-bold text-xs rounded-xl transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
-                      title="Print Weight Slip"
-                    >
-                      <Printer className="h-3.5 w-3.5 text-indigo-600" />
-                      <span>Print</span>
-                    </button>
+                    {isWeightPending(tx) ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setEditingTx(tx)}
+                          className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/90 font-bold text-xs rounded-xl transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
+                          title="Edit Pending Transaction"
+                        >
+                          <Pencil className="h-3.5 w-3.5 text-amber-700" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeletingTx(tx)}
+                          className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/90 font-bold text-xs rounded-xl transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
+                          title="Delete Pending Transaction"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                          <span>Delete</span>
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setViewingTx(tx);
+                          setAutoPrintSlip(false);
+                        }}
+                        className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                        title="View Recorded Bag Weights & Calculations"
+                      >
+                        <Scale className="h-3.5 w-3.5" />
+                        <span>View Details</span>
+                      </button>
+                    )}
                   </div>
                   <div className="text-right">
                     <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Total Value</span>
@@ -756,30 +818,41 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
 
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setViewingTx(tx);
-                              setAutoPrintSlip(false);
-                            }}
-                            className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1"
-                            title="View Recorded Bag Weights & Calculations"
-                          >
-                            <Scale className="h-3.5 w-3.5" />
-                            <span>View Details</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setViewingTx(tx);
-                              setAutoPrintSlip(true);
-                            }}
-                            className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/90 font-bold text-xs rounded-xl transition-all shadow-2xs cursor-pointer flex items-center gap-1"
-                            title="Print Weight Ledger Slip"
-                          >
-                            <Printer className="h-3.5 w-3.5 text-indigo-600" />
-                            <span>Print</span>
-                          </button>
+                          {isWeightPending(tx) ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setEditingTx(tx)}
+                                className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/90 font-bold text-xs rounded-xl transition-all shadow-2xs cursor-pointer flex items-center gap-1"
+                                title="Edit Pending Transaction"
+                              >
+                                <Pencil className="h-3.5 w-3.5 text-amber-700" />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingTx(tx)}
+                                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/90 font-bold text-xs rounded-xl transition-all shadow-2xs cursor-pointer flex items-center gap-1"
+                                title="Delete Pending Transaction"
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                                <span>Delete</span>
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setViewingTx(tx);
+                                setAutoPrintSlip(false);
+                              }}
+                              className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer flex items-center gap-1"
+                              title="View Recorded Bag Weights & Calculations"
+                            >
+                              <Scale className="h-3.5 w-3.5" />
+                              <span>View Details</span>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -921,6 +994,28 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                   ? `Until ${endDate}`
                   : undefined
           }
+        />
+      )}
+
+      {/* Edit Pending Transaction Modal */}
+      {editingTx && (
+        <EditTransactionModal
+          isOpen={!!editingTx}
+          transaction={editingTx}
+          onClose={() => setEditingTx(null)}
+          onSave={handleEditSave}
+          availableMarks={availableMarks}
+          availableAgents={availableAgents}
+        />
+      )}
+
+      {/* Delete Pending Transaction Confirmation Modal */}
+      {deletingTx && (
+        <DeleteConfirmModal
+          isOpen={!!deletingTx}
+          transaction={deletingTx}
+          onClose={() => setDeletingTx(null)}
+          onConfirm={handleDeleteConfirm}
         />
       )}
 
