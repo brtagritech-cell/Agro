@@ -163,17 +163,14 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     return availableAgents.filter(a => a.toLowerCase().includes(q));
   }, [availableAgents, agent]);
 
-  // Available brand marks: from tenant configuration + all already entered transactions
+  // Available brand marks: strictly from this Client Entry Link portal configuration
   const availableMarks = useMemo(() => {
     const fromTenant = tenant?.marks || currentTenant?.marks || branchMarks || [];
-    const fromTxs = transactions.map(t => t.mark).filter(Boolean);
-    const defaults = ['AD', 'Agro', 'BRT', 'RS', 'TS', 'DV', 'BVB'];
-    const set = new Set<string>();
-    [...fromTenant, ...fromTxs, ...defaults].forEach(m => {
-      const clean = (m || '').trim().toUpperCase();
-      if (clean) set.add(clean);
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
+    if (fromTenant.length > 0) {
+      return Array.from(new Set(fromTenant.map(m => (m || '').trim().toUpperCase()).filter(Boolean))).sort();
+    }
+    const fromTxs = transactions.map(t => (t.mark || '').trim().toUpperCase()).filter(Boolean);
+    return Array.from(new Set(fromTxs)).sort();
   }, [tenant, currentTenant, branchMarks, transactions]);
 
   // Filtered marks matching typed input
@@ -1437,7 +1434,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
           transaction={editingTx}
           onClose={() => setEditingTx(null)}
           onSave={handleEditSave}
-          availableMarks={tenant?.marks || currentTenant?.marks || ['Agro', 'BRT', 'RS', 'TS', 'DV', 'BVB']}
+          availableMarks={availableMarks}
           availableAgents={availableAgents}
         />
       )}

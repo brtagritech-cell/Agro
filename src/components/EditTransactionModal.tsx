@@ -13,9 +13,7 @@ import {
   IndianRupee 
 } from 'lucide-react';
 import type { Transaction } from '../services/sheetService';
-import { getShortAgentName } from '../services/sheetService';
-
-const DEFAULT_MARKS = ['AD', 'BRT', 'Agro', 'RS', 'TS', 'DV', 'BVB'];
+import { getShortAgentName, getCurrentTenant } from '../services/sheetService';
 
 interface EditTransactionModalProps {
   isOpen: boolean;
@@ -31,7 +29,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   transaction,
   onClose,
   onSave,
-  availableMarks = DEFAULT_MARKS,
+  availableMarks,
   availableAgents = []
 }) => {
   const [date, setDate] = useState('');
@@ -47,16 +45,24 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const [isAgentDropdownOpen, setIsAgentDropdownOpen] = useState(false);
   const agentDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Combine available marks ensuring all branch marks and defaults are available
+  // Only the active Client Entry Link portal marks
   const combinedMarks = useMemo(() => {
     const set = new Set<string>();
+    // Strictly load marks configured for this specific Client Entry Link portal
+    const currentTenant = getCurrentTenant();
+    const portalMarks = (availableMarks && availableMarks.length > 0)
+      ? availableMarks
+      : (currentTenant?.marks || []);
+
+    portalMarks.forEach(m => {
+      if (m && m.trim()) set.add(m.trim().toUpperCase());
+    });
+
+    // Also include the current transaction's mark if already set
     if (transaction?.mark && transaction.mark.trim()) {
       set.add(transaction.mark.trim().toUpperCase());
     }
-    availableMarks.forEach(m => {
-      if (m && m.trim()) set.add(m.trim().toUpperCase());
-    });
-    DEFAULT_MARKS.forEach(m => set.add(m.toUpperCase()));
+
     return Array.from(set).sort();
   }, [availableMarks, transaction]);
 

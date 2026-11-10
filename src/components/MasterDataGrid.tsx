@@ -110,13 +110,13 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
     return res;
   };
 
-  // Dynamic available marks from current transactions and tenant configuration
+  // Strictly the marks configured for this Client Entry Link portal
   const availableMarks = useMemo(() => {
+    const configured = currentTenant?.marks || [];
+    if (configured.length > 0) {
+      return Array.from(new Set(configured.map(m => (m || '').trim().toUpperCase()).filter(Boolean))).sort();
+    }
     const set = new Set<string>();
-    (currentTenant?.marks || []).forEach(m => {
-      if (m && m.trim()) set.add(m.trim().toUpperCase());
-    });
-    ['AD', 'Agro', 'BRT', 'RS', 'TS', 'DV', 'BVB'].forEach(m => set.add(m));
     transactions.forEach(tx => {
       if (tx.mark && tx.mark.trim()) set.add(tx.mark.trim().toUpperCase());
     });
