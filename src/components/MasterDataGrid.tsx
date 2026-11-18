@@ -12,18 +12,21 @@ import {
   Scale,
   Printer,
   Pencil,
-  Trash2
+  Trash2,
+  Plus
 } from 'lucide-react';
 import { 
   type Transaction, 
   getCurrentTenant, 
   isWeightPending,
   deleteTransaction as defaultDeleteTx,
-  editTransaction as defaultEditTx 
+  editTransaction as defaultEditTx,
+  addTransaction as defaultAddTx
 } from '../services/sheetService';
 import { ViewWeightDetailsModal } from './ViewWeightDetailsModal';
 import { EditTransactionModal } from './EditTransactionModal';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
+import { AddTransactionModal } from './AddTransactionModal';
 
 const getTodayISTString = (): string => {
   try {
@@ -51,6 +54,7 @@ interface MasterDataGridProps {
   isLoading: boolean;
   onDeleteTransaction?: (txId: string) => Promise<{ success: boolean; message: string }>;
   onEditTransaction?: (originalTxId: string, updatedData: Partial<Transaction>) => Promise<{ success: boolean; message: string }>;
+  onAddTransaction?: (tx: Omit<Transaction, 'totalValue'>) => Promise<{ success: boolean; message: string; data?: Transaction }>;
 }
 
 export const MasterDataGrid: React.FC<MasterDataGridProps> = ({ 
@@ -58,8 +62,12 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
   onRefresh,
   isLoading,
   onDeleteTransaction,
-  onEditTransaction 
+  onEditTransaction,
+  onAddTransaction
 }) => {
+  // Add Transaction Modal state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMark, setSelectedMark] = useState('');
@@ -207,7 +215,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
     <div className="space-y-4 sm:space-y-6">
       
       {/* Dashboard Toolbar */}
-      <div className="flex justify-between items-center bg-white p-3.5 sm:p-4 rounded-2xl shadow-soft border border-slate-100">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 sm:p-4 rounded-2xl shadow-soft border border-slate-100">
         <div>
           <div className="flex items-center gap-2.5 flex-wrap">
             <h2 className="text-lg sm:text-xl font-bold text-slate-800">Master Ledger</h2>
@@ -219,7 +227,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
           </div>
           <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Real-time agricultural entries overview</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap sm:flex-nowrap">
           {/* Mobile Card / Table Segmented Toggle */}
           <div className="flex lg:hidden bg-slate-100 p-0.5 rounded-xl border border-slate-200/50 text-[11px] font-semibold">
             <button
@@ -246,10 +254,21 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
             </button>
           </div>
 
+          {/* Add New Transaction Button */}
+          <button
+            type="button"
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex items-center justify-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl font-semibold shadow-md shadow-emerald-600/20 active:scale-[0.98] transition-all text-xs sm:text-sm cursor-pointer shrink-0"
+            title="Add New Transaction"
+          >
+            <Plus className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
+            <span>Add New Transaction</span>
+          </button>
+
           <button
             onClick={onRefresh}
             disabled={isLoading}
-            className="p-2 sm:p-2.5 text-slate-600 hover:text-emerald-700 bg-slate-50 hover:bg-emerald-50 rounded-xl transition-all border border-slate-200/50"
+            className="p-2 sm:p-2.5 text-slate-600 hover:text-emerald-700 bg-slate-50 hover:bg-emerald-50 rounded-xl transition-all border border-slate-200/50 cursor-pointer"
             title="Refresh Ledger"
           >
             {isLoading ? (
@@ -332,6 +351,17 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
               <svg className="fill-current h-4 w-4" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
             </div>
           </div>
+
+          {/* Add New Transaction Button */}
+          <button
+            type="button"
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-2xs active:scale-[0.98] cursor-pointer shrink-0"
+            title="Add New Transaction"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Add Transaction</span>
+          </button>
 
           {/* Print Master Ledger Button */}
           <button
@@ -1076,6 +1106,21 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
           transaction={deletingTx}
           onClose={() => setDeletingTx(null)}
           onConfirm={handleDeleteConfirm}
+        />
+      )}
+
+      {/* Add New Transaction Modal */}
+      {isAddModalOpen && (
+        <AddTransactionModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          onAddTransaction={onAddTransaction || defaultAddTx}
+          transactions={transactions}
+          availableMarks={availableMarks}
+          availableAgents={availableAgents}
+          onSuccess={() => {
+            onRefresh();
+          }}
         />
       )}
 

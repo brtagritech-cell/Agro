@@ -180,6 +180,10 @@ function App() {
     const result = await addTransaction(tx);
     await loadData(); // Reload fresh state
     setIsLoading(false);
+    setToast({
+      message: result.message,
+      type: result.success ? 'success' : 'error'
+    });
     return result;
   };
 
@@ -431,6 +435,7 @@ function App() {
             isLoading={isLoading}
             onDeleteTransaction={handleDeleteTransaction}
             onEditTransaction={handleEditTransaction}
+            onAddTransaction={handleAddTransaction}
           />
         )}
       </main>
