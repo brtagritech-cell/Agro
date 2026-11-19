@@ -11,7 +11,9 @@ import {
   editTransaction, 
   setScriptUrl, 
   getCurrentSubUrl, 
-  getCurrentTenant, 
+  getCurrentTenant,
+  fetchTenantsFromSupabase,
+  isSupabaseEnabled, 
   type Transaction 
 } from './services/sheetService';
 import { LogOut, LayoutDashboard, FileSpreadsheet, CheckCircle, AlertTriangle, X, Zap } from 'lucide-react';
@@ -104,6 +106,13 @@ function App() {
   const loadData = async () => {
     setIsLoading(true);
     try {
+      if (isSupabaseEnabled()) {
+        try {
+          await fetchTenantsFromSupabase();
+        } catch (tErr) {
+          console.warn("Tenants sync note:", tErr);
+        }
+      }
       const data = await fetchTransactions();
       // Sort transactions by date descending, then timestamp descending
       const sorted = [...data].sort((a, b) => {

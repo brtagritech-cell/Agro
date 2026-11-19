@@ -155,7 +155,12 @@ export function getTenants(): TenantConfig[] {
     const bagCost = t.bagCost !== undefined ? t.bagCost : (masterData.bagCost !== undefined ? parseFloat(masterData.bagCost) : 25);
     const taram = t.taram !== undefined ? t.taram : (masterData.taram !== undefined ? parseFloat(masterData.taram) : 1.100);
     const companyName = t.companyName || masterData.companyName || '';
-    const coldStorages = Array.isArray(t.coldStorages) ? t.coldStorages : (Array.isArray(masterData.coldStorages) ? masterData.coldStorages : []);
+    const defaultStorages = ['Balaji Cold Storage', 'Royal Agro Cold Storage'];
+    const coldStorages = (Array.isArray(t.coldStorages) && t.coldStorages.length > 0) 
+      ? t.coldStorages 
+      : (Array.isArray(masterData.coldStorages) && masterData.coldStorages.length > 0) 
+        ? masterData.coldStorages 
+        : defaultStorages;
     return {
       ...t,
       companyName,
@@ -208,7 +213,7 @@ export function getCurrentTenant(): TenantConfig {
       subUserPasswords: {},
       marks: [branchName],
       agents: [],
-      coldStorages: [],
+      coldStorages: ['Balaji Cold Storage', 'Royal Agro Cold Storage'],
       fullLink: `${window.location.origin}${window.location.pathname}#${normalizeSubUrl(currentSubUrl)}`,
       bagCost: 25,
       taram: 1.100
@@ -405,7 +410,12 @@ export async function fetchTenantsFromSupabase(): Promise<{ success: boolean; te
           ? Number(t.taram)
           : (masterData.taram !== undefined ? parseFloat(masterData.taram) : 1.100);
         const companyName = t.company_name || masterData.companyName || '';
-        const coldStorages = Array.isArray(t.cold_storages) ? t.cold_storages : (Array.isArray(masterData.coldStorages) ? masterData.coldStorages : []);
+        const defaultStorages = ['Balaji Cold Storage', 'Royal Agro Cold Storage'];
+        const coldStorages = (Array.isArray(t.cold_storages) && t.cold_storages.length > 0)
+          ? t.cold_storages 
+          : (Array.isArray(masterData.coldStorages) && masterData.coldStorages.length > 0)
+            ? masterData.coldStorages 
+            : defaultStorages;
         return {
           subUrl: t.sub_url,
           companyName,
@@ -539,7 +549,12 @@ export async function fetchTransactions(): Promise<Transaction[]> {
           ? Number(t.taram)
           : (masterData.taram !== undefined ? parseFloat(masterData.taram) : 1.100);
         const companyName = t.company_name || masterData.companyName || '';
-        const coldStorages = Array.isArray(t.cold_storages) ? t.cold_storages : (Array.isArray(masterData.coldStorages) ? masterData.coldStorages : []);
+        const defaultStorages = ['Balaji Cold Storage', 'Royal Agro Cold Storage'];
+        const coldStorages = (Array.isArray(t.cold_storages) && t.cold_storages.length > 0)
+          ? t.cold_storages 
+          : (Array.isArray(masterData.coldStorages) && masterData.coldStorages.length > 0)
+            ? masterData.coldStorages 
+            : defaultStorages;
         return {
           subUrl: t.sub_url,
           companyName,

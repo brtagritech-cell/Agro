@@ -873,6 +873,10 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                                 setColdStorageName(item);
                                 setIsColdStorageDropdownOpen(false);
                               }}
+                              onClick={() => {
+                                setColdStorageName(item);
+                                setIsColdStorageDropdownOpen(false);
+                              }}
                               className={`px-3 py-2 text-xs font-semibold rounded-xl cursor-pointer transition-all flex items-center justify-between ${
                                 isSelected 
                                   ? 'bg-sky-50 text-sky-800 font-bold' 
@@ -897,6 +901,9 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                         <div
                           onMouseDown={(e) => {
                             e.preventDefault();
+                            setIsColdStorageDropdownOpen(false);
+                          }}
+                          onClick={() => {
                             setIsColdStorageDropdownOpen(false);
                           }}
                           className="mt-1 pt-1 border-t border-slate-100 px-3 py-2 bg-sky-50 hover:bg-sky-100 text-sky-800 rounded-xl cursor-pointer text-xs font-bold flex items-center gap-1.5 transition-colors"
@@ -1071,10 +1078,17 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 <div>Mark:</div>
                 <div className="text-slate-800 font-bold uppercase">{conflictTransaction.mark}</div>
                 <div>Storage:</div>
-                <div className="text-slate-800 font-bold">
-                  {conflictTransaction.storageType === 'AC' 
-                    ? `AC (${conflictTransaction.coldStorageName || 'Cold Storage'})` 
-                    : 'NON AC'}
+                <div>
+                  {conflictTransaction.storageType === 'AC' ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-bold text-[10px] bg-sky-50 text-sky-800 border border-sky-200">
+                      <Snowflake className="w-2.5 h-2.5 text-sky-600" />
+                      AC {conflictTransaction.coldStorageName ? `(${conflictTransaction.coldStorageName})` : ''}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-semibold text-[10px] bg-slate-100 text-slate-700 border border-slate-200">
+                      NON AC
+                    </span>
+                  )}
                 </div>
                 <div>Weight Status:</div>
                 <div className="text-slate-800 font-bold font-mono">{conflictTransaction.weight || 'Pending'}</div>

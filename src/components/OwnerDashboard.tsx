@@ -1049,6 +1049,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
         availableColdStorages={availableColdStorages}
         onSuccess={() => {
           setIsFormOpen(false);
+          setTenant(getCurrentTenant());
           if (onRefresh) onRefresh();
         }}
       />
@@ -1072,6 +1073,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
           onSave={handleEditSave}
           availableMarks={availableMarks}
           availableAgents={availableAgents}
+          availableColdStorages={availableColdStorages}
         />
       )}
 
