@@ -10,10 +10,14 @@ import {
   AlertTriangle, 
   Save, 
   Hash, 
-  IndianRupee 
+  IndianRupee,
+  Snowflake,
+  Warehouse,
+  Wind,
+  Plus
 } from 'lucide-react';
 import type { Transaction } from '../services/sheetService';
-import { getShortAgentName, getCurrentTenant } from '../services/sheetService';
+import { getShortAgentName, getCurrentTenant, updateBranchConfiguration } from '../services/sheetService';
 
 interface EditTransactionModalProps {
   isOpen: boolean;
@@ -22,6 +26,7 @@ interface EditTransactionModalProps {
   onSave: (originalTxId: string, updatedData: Partial<Transaction>) => Promise<{ success: boolean; message: string }>;
   availableMarks?: string[];
   availableAgents?: string[];
+  availableColdStorages?: string[];
 }
 
 export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
@@ -30,14 +35,18 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   onClose,
   onSave,
   availableMarks,
-  availableAgents = []
+  availableAgents = [],
+  availableColdStorages = []
 }) => {
+  const currentTenant = getCurrentTenant();
   const [date, setDate] = useState('');
   const [lot, setLot] = useState('');
   const [bags, setBags] = useState('');
   const [rate, setRate] = useState('');
   const [agent, setAgent] = useState('');
   const [mark, setMark] = useState('');
+  const [storageType, setStorageType] = useState<'NON AC' | 'AC'>('NON AC');
+  const [coldStorageName, setColdStorageName] = useState('');
   const [error, setError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -45,11 +54,14 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const [isAgentDropdownOpen, setIsAgentDropdownOpen] = useState(false);
   const agentDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Cold Storage dropdown autocomplete
+  const [isColdStorageDropdownOpen, setIsColdStorageDropdownOpen] = useState(false);
+  const coldStorageDropdownRef = useRef<HTMLDivElement>(null);
+
   // Only the active Client Entry Link portal marks
   const combinedMarks = useMemo(() => {
     const set = new Set<string>();
     // Strictly load marks configured for this specific Client Entry Link portal
-    const currentTenant = getCurrentTenant();
     const portalMarks = (availableMarks && availableMarks.length > 0)
       ? availableMarks
       : (currentTenant?.marks || []);
@@ -64,7 +76,28 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     }
 
     return Array.from(set).sort();
-  }, [availableMarks, transaction]);
+  }, [availableMarks, transaction, currentTenant]);
+
+  // Available cold storages
+  const allColdStorages = useMemo(() => {
+    const fromTenant = currentTenant?.coldStorages || [];
+    const fromProps = availableColdStorages || [];
+    const set = new Set<string>();
+    [...fromTenant, ...fromProps].forEach(cs => {
+      const clean = (cs || '').trim();
+      if (clean) set.add(clean);
+    });
+    if (transaction?.coldStorageName && transaction.coldStorageName.trim()) {
+      set.add(transaction.coldStorageName.trim());
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [currentTenant, availableColdStorages, transaction]);
+
+  const filteredColdStorages = useMemo(() => {
+    if (!coldStorageName.trim()) return allColdStorages;
+    const q = coldStorageName.trim().toLowerCase();
+    return allColdStorages.filter(cs => cs.toLowerCase().includes(q));
+  }, [allColdStorages, coldStorageName]);
 
   // Initialize values when modal opens with a transaction
   useEffect(() => {
@@ -75,15 +108,22 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       setRate(String(transaction.rate || ''));
       setAgent(transaction.agent || '');
       setMark(transaction.mark ? transaction.mark.toUpperCase() : (combinedMarks[0] || 'AD'));
+      setStorageType(transaction.storageType === 'AC' ? 'AC' : 'NON AC');
+      setColdStorageName(transaction.coldStorageName || '');
+      setIsAgentDropdownOpen(false);
+      setIsColdStorageDropdownOpen(false);
       setError('');
     }
   }, [transaction, isOpen, combinedMarks]);
 
-  // Click outside listener for agent dropdown
+  // Click outside listener for agent and cold storage dropdowns
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (agentDropdownRef.current && !agentDropdownRef.current.contains(e.target as Node)) {
         setIsAgentDropdownOpen(false);
+      }
+      if (coldStorageDropdownRef.current && !coldStorageDropdownRef.current.contains(e.target as Node)) {
+        setIsColdStorageDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -158,21 +198,42 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       setError('Mark is required.');
       return;
     }
+    if (storageType === 'AC' && !coldStorageName.trim()) {
+      setError('Cold storage name is required when AC is selected.');
+      return;
+    }
 
     setIsSaving(true);
     try {
+      const trimmedColdStorage = storageType === 'AC' ? coldStorageName.trim() : '';
       const result = await onSave(transaction.transactionId, {
         date,
         lot: lot.trim(),
         bags: parsedBags,
         rate: parsedRate,
         agent: agent.trim(),
-        mark: mark.trim().toUpperCase()
+        mark: mark.trim().toUpperCase(),
+        storageType,
+        coldStorageName: trimmedColdStorage
       });
 
       if (!result.success) {
         setError(result.message);
       } else {
+        // Auto-save new cold storage name to branch configuration if novel
+        if (storageType === 'AC' && trimmedColdStorage && currentTenant?.subUrl) {
+          const currentStorages = currentTenant.coldStorages || [];
+          const isKnown = currentStorages.some(s => s.toLowerCase() === trimmedColdStorage.toLowerCase());
+          if (!isKnown) {
+            try {
+              await updateBranchConfiguration(currentTenant.subUrl, {
+                coldStorages: [...currentStorages, trimmedColdStorage]
+              });
+            } catch (err) {
+              console.warn('Failed to auto-save new cold storage to branch in edit modal:', err);
+            }
+          }
+        }
         onClose();
       }
     } catch (err: any) {
@@ -424,6 +485,148 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 ))}
               </select>
             </div>
+
+            {/* Storage Type (NON AC vs AC) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-1">
+                  <Snowflake className="h-3.5 w-3.5 text-slate-400" />
+                  <span>Storage Type</span>
+                </label>
+                <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
+                  {storageType}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStorageType('NON AC');
+                    setColdStorageName('');
+                    setIsColdStorageDropdownOpen(false);
+                  }}
+                  className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    storageType === 'NON AC'
+                      ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800'
+                  }`}
+                >
+                  <Wind className={`h-3.5 w-3.5 ${storageType === 'NON AC' ? 'text-slate-300' : 'text-slate-400'}`} />
+                  <span>NON AC</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStorageType('AC');
+                    setIsColdStorageDropdownOpen(true);
+                  }}
+                  className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    storageType === 'AC'
+                      ? 'bg-sky-600 border-sky-600 text-white shadow-md shadow-sky-600/25 ring-2 ring-sky-300'
+                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800'
+                  }`}
+                >
+                  <Snowflake className={`h-3.5 w-3.5 ${storageType === 'AC' ? 'text-white' : 'text-sky-500'}`} />
+                  <span>AC (Cold Storage)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Cold Storage Name Field when AC is selected */}
+            {storageType === 'AC' && (
+              <div className="space-y-1.5 animate-fade-in relative" ref={coldStorageDropdownRef}>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-sky-800 uppercase tracking-wider flex items-center gap-1">
+                    <Warehouse className="h-3.5 w-3.5 text-sky-600" />
+                    <span>Cold Storage Name</span>
+                  </label>
+                  {coldStorageName.trim() && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border font-mono ${
+                      allColdStorages.some(s => s.toLowerCase() === coldStorageName.trim().toLowerCase())
+                        ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                        : 'text-indigo-700 bg-indigo-50 border-indigo-200'
+                    }`}>
+                      {allColdStorages.some(s => s.toLowerCase() === coldStorageName.trim().toLowerCase())
+                        ? 'Existing Cold Storage'
+                        : '+ New Cold Storage'}
+                    </span>
+                  )}
+                </div>
+
+                <div className="relative">
+                  <input
+                    type="text"
+                    required={storageType === 'AC'}
+                    placeholder="Search or enter cold storage name"
+                    value={coldStorageName}
+                    onChange={(e) => {
+                      setColdStorageName(e.target.value);
+                      setIsColdStorageDropdownOpen(true);
+                    }}
+                    onFocus={() => setIsColdStorageDropdownOpen(true)}
+                    className="w-full px-3.5 py-2.5 pr-10 bg-sky-50/50 border border-sky-300 rounded-xl focus:bg-white text-sm font-semibold text-slate-800 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all placeholder:text-slate-400"
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => setIsColdStorageDropdownOpen(prev => !prev)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors cursor-pointer"
+                    title="Toggle Cold Storage Suggestions"
+                  >
+                    <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isColdStorageDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
+
+                {/* Cold Storage Dropdown Menu */}
+                {isColdStorageDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-48 overflow-y-auto overscroll-contain animate-fade-in p-1.5 space-y-0.5">
+                    {filteredColdStorages.length > 0 ? (
+                      filteredColdStorages.map((item) => {
+                        const isSelected = item.toLowerCase() === coldStorageName.trim().toLowerCase();
+                        return (
+                          <div
+                            key={item}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setColdStorageName(item);
+                              setIsColdStorageDropdownOpen(false);
+                            }}
+                            className={`px-3 py-2 text-xs font-semibold rounded-xl cursor-pointer transition-all flex items-center justify-between ${
+                              isSelected 
+                                ? 'bg-sky-50 text-sky-800 font-bold' 
+                                : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Snowflake className="h-3 w-3 text-sky-500 shrink-0" />
+                              <span className="break-words">{item}</span>
+                            </div>
+                            {isSelected && <Check className="h-3.5 w-3.5 text-sky-600 shrink-0" />}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="p-2.5 text-center text-xs text-slate-400 font-medium">
+                        {allColdStorages.length === 0 ? 'No cold storages configured yet' : `No cold storages matching "${coldStorageName}"`}
+                      </div>
+                    )}
+
+                    {coldStorageName.trim() && !allColdStorages.some(s => s.toLowerCase() === coldStorageName.trim().toLowerCase()) && (
+                      <div
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setIsColdStorageDropdownOpen(false);
+                        }}
+                        className="mt-1 pt-1 border-t border-slate-100 px-3 py-2 bg-sky-50 hover:bg-sky-100 text-sky-800 rounded-xl cursor-pointer text-xs font-bold flex items-center gap-1.5 transition-colors"
+                      >
+                        <Plus className="h-3.5 w-3.5 text-sky-600 shrink-0" />
+                        <span className="truncate">Add new cold storage: <strong>"{coldStorageName.trim()}"</strong></span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
           </div>
 

@@ -16,7 +16,8 @@ import {
   Upload,
   Zap,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  Snowflake
 } from 'lucide-react';
 import { 
   getTenants, 
@@ -74,10 +75,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
   const [agentsList, setAgentsList] = useState<string[]>([]);
   const [newAgentInput, setNewAgentInput] = useState('');
 
+  const [coldStoragesList, setColdStoragesList] = useState<string[]>([]);
+  const [newColdStorageInput, setNewColdStorageInput] = useState('');
+
   const [formError, setFormError] = useState('');
   const [subUserError, setSubUserError] = useState('');
   const [markError, setMarkError] = useState('');
   const [agentError, setAgentError] = useState('');
+  const [coldStorageError, setColdStorageError] = useState('');
 
   // Load configuration on mount or auth success
   useEffect(() => {
@@ -129,10 +134,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
     setNewMarkInput('');
     setAgentsList(['Ramesh Kumar', 'Suresh & Sons', 'Patel Agro', 'BVB Agencies']);
     setNewAgentInput('');
+    setColdStoragesList(['Sree Rama Cold Storage', 'Sri Venkateswara Cold Storage', 'Balaji Cold Storage']);
+    setNewColdStorageInput('');
     setFormError('');
     setSubUserError('');
     setMarkError('');
     setAgentError('');
+    setColdStorageError('');
     setIsFormOpen(true);
   };
 
@@ -158,11 +166,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
     
     setAgentsList([...(tenant.agents || [])]);
     setNewAgentInput('');
+
+    setColdStoragesList([...(tenant.coldStorages && tenant.coldStorages.length > 0 ? tenant.coldStorages : ['Sree Rama Cold Storage', 'Sri Venkateswara Cold Storage', 'Balaji Cold Storage'])]);
+    setNewColdStorageInput('');
     
     setFormError('');
     setSubUserError('');
     setMarkError('');
     setAgentError('');
+    setColdStorageError('');
     setIsFormOpen(true);
   };
 
@@ -252,6 +264,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
     setAgentsList(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleAddColdStorage = () => {
+    const trimmed = newColdStorageInput.trim();
+    if (!trimmed) {
+      setColdStorageError('Please enter a cold storage name before adding.');
+      return;
+    }
+    if (coldStoragesList.some(cs => cs.toLowerCase() === trimmed.toLowerCase())) {
+      setColdStorageError(`Cold Storage "${trimmed}" is already added.`);
+      return;
+    }
+    setColdStoragesList(prev => [...prev, trimmed]);
+    setNewColdStorageInput('');
+    setColdStorageError('');
+  };
+
+  const handleRemoveColdStorage = (index: number) => {
+    setColdStoragesList(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSaveTenant = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
@@ -290,6 +321,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
       }
     }
 
+    // Auto-commit any pending cold storage in newColdStorageInput
+    let finalColdStorages = [...coldStoragesList];
+    if (newColdStorageInput.trim()) {
+      const pendingCS = newColdStorageInput.trim();
+      if (!finalColdStorages.some(cs => cs.toLowerCase() === pendingCS.toLowerCase())) {
+        finalColdStorages.push(pendingCS);
+      }
+    }
+
     // Auto-commit any pending sub-user in newSubUserName
     let finalSubUsersList = [...subUsersList];
     if (newSubUserName.trim()) {
@@ -313,6 +353,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
     });
 
     const newTenant: TenantConfig = {
+      ...(editingTenant || {}),
       subUrl: normalizedPath,
       companyName: companyName.trim(),
       sheetUrl: '', // No longer used under Supabase
@@ -321,7 +362,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
       subUsers,
       subUserPasswords,
       marks: finalMarks,
-      agents: finalAgents
+      agents: finalAgents,
+      coldStorages: finalColdStorages
     };
 
     let updatedTenants = [...tenants];
@@ -389,6 +431,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
           const rawSubUsers = hasCompanyCol ? columns[4] : columns[3];
           const rawMarks = hasCompanyCol ? columns[5] : columns[4];
           const rawAgents = (hasCompanyCol ? columns[6] : columns[5]) || "";
+          const rawColdStorages = (hasCompanyCol ? columns[7] : columns[6]) || "";
 
           const normalizedPath = normalizeSubUrl(rawSubUrl);
           if (!normalizedPath || normalizedPath === '/' || normalizedPath === '/admin/') continue;
@@ -420,6 +463,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
             .map(a => a.replace(/"/g, '').trim())
             .filter(Boolean);
 
+          const coldStoragesParsed = rawColdStorages
+            ? rawColdStorages.split(',').map(cs => cs.replace(/"/g, '').trim()).filter(Boolean)
+            : ['Sree Rama Cold Storage', 'Sri Venkateswara Cold Storage', 'Balaji Cold Storage'];
+
           if (marksList.length === 0) continue;
 
           newTenants.push({
@@ -431,7 +478,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
             subUsers: subUsersList,
             subUserPasswords,
             marks: marksList,
-            agents: agentsList
+            agents: agentsList,
+            coldStorages: coldStoragesParsed
           });
         }
 
@@ -463,8 +511,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
   };
 
   const downloadCSVTemplate = () => {
-    const headers = 'Company Name,Sub-URL Path,Owner ID,Owner Password,Sub-Users,Brand Marks,Agent Names\n';
-    const sample = '"Agro Logistics","/Agro/TestBranch/","owner_id","owner_pass","Ramesh:1234, Suresh:1234","Agro, BRT, RS","Agent A, Agent B"\n';
+    const headers = 'Company Name,Sub-URL Path,Owner ID,Owner Password,Sub-Users,Brand Marks,Agent Names,Cold Storage Names\n';
+    const sample = '"Agro Logistics","/Agro/TestBranch/","owner_id","owner_pass","Ramesh:1234, Suresh:1234","Agro, BRT, RS","Agent A, Agent B","Sree Rama Cold Storage, Sri Venkateswara Cold Storage, Balaji Cold Storage"\n';
     const blob = new Blob([headers + sample], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -789,6 +837,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                   <div>
                     <span className="text-slate-400 block font-semibold uppercase tracking-wider text-[10px]">Allowed Marks</span>
                     <span className="text-slate-700 font-bold uppercase truncate block mt-0.5">{(t.marks || []).join(', ')}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block font-semibold uppercase tracking-wider text-[10px]">Cold Storages</span>
+                    <span className="text-slate-700 font-medium truncate block mt-0.5">{(t.coldStorages && t.coldStorages.length > 0) ? t.coldStorages.join(', ') : 'None configured'}</span>
                   </div>
                   <div className="sm:col-span-2">
                     <span className="text-slate-400 block font-semibold uppercase tracking-wider text-[10px]">Sub-Users List</span>
@@ -1197,6 +1249,81 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExitAdmin }) =
                           onClick={() => handleRemoveAgent(idx)}
                           className="text-emerald-500 hover:text-rose-600 hover:bg-rose-50 p-0.5 rounded transition-colors"
                           title={`Remove ${a}`}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Allowed Cold Storages Section */}
+              <div className="space-y-2.5 border border-slate-200 rounded-2xl p-3.5 bg-slate-50/70">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Snowflake className="w-3.5 h-3.5 text-cyan-600" />
+                    <span>Configured Cold Storages ({coldStoragesList.length})</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    Available for AC storage entries
+                  </span>
+                </div>
+
+                {/* Add Cold Storage Input Row */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Enter cold storage name (e.g. Balaji Cold Storage)"
+                    value={newColdStorageInput}
+                    onChange={(e) => {
+                      setNewColdStorageInput(e.target.value);
+                      if (coldStorageError) setColdStorageError('');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddColdStorage();
+                      }
+                    }}
+                    className={`flex-1 px-3 py-2 bg-white border rounded-xl focus:border-indigo-600 text-xs font-medium text-slate-800 transition-all shadow-2xs ${
+                      coldStorageError ? 'border-rose-400 ring-1 ring-rose-200' : 'border-slate-200'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddColdStorage}
+                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm shadow-indigo-600/20 transition-all shrink-0 active:scale-95 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Storage
+                  </button>
+                </div>
+
+                {coldStorageError && (
+                  <div className="flex items-center gap-1.5 p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold animate-fadeIn">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                    <span>{coldStorageError}</span>
+                  </div>
+                )}
+
+                {/* Added Cold Storages Display List */}
+                <div className="flex flex-wrap gap-1.5 p-2.5 bg-white border border-slate-200 rounded-xl min-h-[44px] items-center">
+                  {coldStoragesList.length === 0 ? (
+                    <span className="text-[11px] text-slate-400 italic">No cold storages configured yet. Enter a cold storage name above and click Add Storage.</span>
+                  ) : (
+                    coldStoragesList.map((cs, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-cyan-50 border border-cyan-200 text-cyan-800 font-semibold text-xs rounded-lg shadow-2xs group"
+                      >
+                        <Snowflake className="w-3 h-3 text-cyan-600 shrink-0" />
+                        <span>{cs}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveColdStorage(idx)}
+                          className="text-cyan-500 hover:text-rose-600 hover:bg-rose-50 p-0.5 rounded transition-colors cursor-pointer"
+                          title={`Remove ${cs}`}
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>

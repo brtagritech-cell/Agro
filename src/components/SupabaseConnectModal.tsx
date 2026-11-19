@@ -37,15 +37,17 @@ CREATE TABLE IF NOT EXISTS public.tenants (
   sub_user_passwords JSONB DEFAULT '{}'::jsonb,
   marks JSONB DEFAULT '[]'::jsonb,
   agents JSONB DEFAULT '[]'::jsonb,
+  cold_storages JSONB DEFAULT '[]'::jsonb,
   full_link TEXT DEFAULT '',
   bag_cost NUMERIC DEFAULT 25,
   taram NUMERIC DEFAULT 1.100
 );
 
--- Ensure company_name, bag_cost, taram columns exist if table was created previously
+-- Ensure company_name, bag_cost, taram, cold_storages columns exist if table was created previously
 ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS company_name TEXT DEFAULT '';
 ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS bag_cost NUMERIC DEFAULT 25;
 ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS taram NUMERIC DEFAULT 1.100;
+ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS cold_storages JSONB DEFAULT '[]'::jsonb;
 
 -- 2. Create 'transactions' table for ledger entries
 CREATE TABLE IF NOT EXISTS public.transactions (
@@ -68,8 +70,14 @@ CREATE TABLE IF NOT EXISTS public.transactions (
   gross_weight NUMERIC,
   bags_weight NUMERIC,
   net_weight NUMERIC,
-  calculated_amount NUMERIC
+  calculated_amount NUMERIC,
+  storage_type TEXT DEFAULT 'NON AC',
+  cold_storage_name TEXT DEFAULT ''
 );
+
+-- Ensure storage_type and cold_storage_name columns exist if table was created previously
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS storage_type TEXT DEFAULT 'NON AC';
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS cold_storage_name TEXT DEFAULT '';
 
 -- 3. Enable Row Level Security (RLS)
 ALTER TABLE public.tenants ENABLE ROW LEVEL SECURITY;

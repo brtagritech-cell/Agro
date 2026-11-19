@@ -21,6 +21,8 @@ export interface Transaction {
   bagsWeight?: number;
   netWeight?: number;
   calculatedAmount?: number;
+  storageType?: 'AC' | 'NON AC' | string;
+  coldStorageName?: string;
 }
 
 export interface TenantConfig {
@@ -33,6 +35,7 @@ export interface TenantConfig {
   subUserPasswords?: { [username: string]: any }; // Sub-user passwords and master data
   marks: string[]; // Allowed marks
   agents?: string[]; // Commission agents
+  coldStorages?: string[]; // Cold storage facilities
   fullLink?: string; // Full sub URL link
   bagCost?: number;
   taram?: number;
@@ -52,6 +55,7 @@ const DEFAULT_TENANTS: TenantConfig[] = [
     subUserPasswords: { Ramesh: '1234', Suresh: '1234', Patel: '1234', BVB: '1234' },
     marks: ['BRT', 'RS', 'TS', 'DV', 'BVB'],
     agents: ['Ramesh Kumar', 'Suresh & Sons', 'Patel Agro', 'BVB Agencies'],
+    coldStorages: ['Balaji Cold Storage', 'Royal Agro Cold Storage'],
     fullLink: ''
   },
   {
@@ -64,6 +68,7 @@ const DEFAULT_TENANTS: TenantConfig[] = [
     subUserPasswords: { BRT: '1234', Ramesh: '1234', Suresh: '1234', Patel: '1234', BVB: '1234' },
     marks: ['AGRO', 'BRT', 'RS', 'TS', 'DV', 'BVB'],
     agents: ['Ramesh Kumar', 'Suresh & Sons', 'Patel Agro', 'BVB Agencies'],
+    coldStorages: ['Balaji Cold Storage', 'Royal Agro Cold Storage'],
     fullLink: ''
   },
   {
@@ -76,6 +81,7 @@ const DEFAULT_TENANTS: TenantConfig[] = [
     subUserPasswords: { BRT: '1234', Ramesh: '1234', Suresh: '1234', Patel: '1234', BVB: '1234' },
     marks: ['AGRO', 'BRT', 'RS', 'TS', 'DV', 'BVB'],
     agents: ['Ramesh Kumar', 'Suresh & Sons', 'Patel Agro', 'BVB Agencies'],
+    coldStorages: ['Balaji Cold Storage', 'Royal Agro Cold Storage'],
     fullLink: ''
   }
 ];
@@ -149,11 +155,13 @@ export function getTenants(): TenantConfig[] {
     const bagCost = t.bagCost !== undefined ? t.bagCost : (masterData.bagCost !== undefined ? parseFloat(masterData.bagCost) : 25);
     const taram = t.taram !== undefined ? t.taram : (masterData.taram !== undefined ? parseFloat(masterData.taram) : 1.100);
     const companyName = t.companyName || masterData.companyName || '';
+    const coldStorages = Array.isArray(t.coldStorages) ? t.coldStorages : (Array.isArray(masterData.coldStorages) ? masterData.coldStorages : []);
     return {
       ...t,
       companyName,
       bagCost,
-      taram
+      taram,
+      coldStorages
     };
   });
 }
@@ -200,6 +208,7 @@ export function getCurrentTenant(): TenantConfig {
       subUserPasswords: {},
       marks: [branchName],
       agents: [],
+      coldStorages: [],
       fullLink: `${window.location.origin}${window.location.pathname}#${normalizeSubUrl(currentSubUrl)}`,
       bagCost: 25,
       taram: 1.100
@@ -241,7 +250,8 @@ export async function syncBranchesToSheet(tenants: TenantConfig[]): Promise<{ su
       passwords._master_data = {
         bagCost: t.bagCost ?? 25,
         taram: t.taram ?? 1.100,
-        companyName: t.companyName || ''
+        companyName: t.companyName || '',
+        coldStorages: t.coldStorages || []
       };
       return {
         sub_url: t.subUrl,
@@ -252,6 +262,7 @@ export async function syncBranchesToSheet(tenants: TenantConfig[]): Promise<{ su
         sub_user_passwords: passwords,
         marks: t.marks || [],
         agents: t.agents || [],
+        cold_storages: t.coldStorages || [],
         full_link: t.fullLink || '',
         bag_cost: t.bagCost ?? 25,
         taram: t.taram ?? 1.100
@@ -265,9 +276,10 @@ export async function syncBranchesToSheet(tenants: TenantConfig[]): Promise<{ su
     if (error && error.message && (
       error.message.includes('company_name') || 
       error.message.includes('bag_cost') || 
-      error.message.includes('taram')
+      error.message.includes('taram') ||
+      error.message.includes('cold_storages')
     )) {
-      const fallbackRows = rows.map(({ company_name, bag_cost, taram, ...rest }: any) => rest);
+      const fallbackRows = rows.map(({ company_name, bag_cost, taram, cold_storages, ...rest }: any) => rest);
       const res = await supabase.from('tenants').upsert(fallbackRows);
       error = res.error;
     }
@@ -393,6 +405,7 @@ export async function fetchTenantsFromSupabase(): Promise<{ success: boolean; te
           ? Number(t.taram)
           : (masterData.taram !== undefined ? parseFloat(masterData.taram) : 1.100);
         const companyName = t.company_name || masterData.companyName || '';
+        const coldStorages = Array.isArray(t.cold_storages) ? t.cold_storages : (Array.isArray(masterData.coldStorages) ? masterData.coldStorages : []);
         return {
           subUrl: t.sub_url,
           companyName,
@@ -403,6 +416,7 @@ export async function fetchTenantsFromSupabase(): Promise<{ success: boolean; te
           subUserPasswords: t.sub_user_passwords || {},
           marks: t.marks || [],
           agents: t.agents || [],
+          coldStorages,
           fullLink: t.full_link || '',
           bagCost,
           taram
@@ -441,6 +455,7 @@ export async function updateBranchConfiguration(
       subUserPasswords: updatedData.subUserPasswords || {},
       marks: updatedData.marks || [],
       agents: updatedData.agents || [],
+      coldStorages: updatedData.coldStorages || [],
       bagCost: updatedData.bagCost ?? 25,
       taram: updatedData.taram ?? 1.100
     };
@@ -524,6 +539,7 @@ export async function fetchTransactions(): Promise<Transaction[]> {
           ? Number(t.taram)
           : (masterData.taram !== undefined ? parseFloat(masterData.taram) : 1.100);
         const companyName = t.company_name || masterData.companyName || '';
+        const coldStorages = Array.isArray(t.cold_storages) ? t.cold_storages : (Array.isArray(masterData.coldStorages) ? masterData.coldStorages : []);
         return {
           subUrl: t.sub_url,
           companyName,
@@ -534,6 +550,7 @@ export async function fetchTransactions(): Promise<Transaction[]> {
           subUserPasswords: t.sub_user_passwords || {},
           marks: t.marks || [],
           agents: t.agents || [],
+          coldStorages,
           fullLink: t.full_link || '',
           bagCost,
           taram
@@ -593,7 +610,9 @@ export async function fetchTransactions(): Promise<Transaction[]> {
           grossWeight: item.gross_weight ? parseFloat(String(item.gross_weight)) : undefined,
           bagsWeight: item.bags_weight ? parseFloat(String(item.bags_weight)) : undefined,
           netWeight: item.net_weight ? parseFloat(String(item.net_weight)) : undefined,
-          calculatedAmount: item.calculated_amount ? parseFloat(String(item.calculated_amount)) : undefined
+          calculatedAmount: item.calculated_amount ? parseFloat(String(item.calculated_amount)) : undefined,
+          storageType: item.storage_type || item.storageType || 'NON AC',
+          coldStorageName: (item.storage_type === 'AC' || item.storageType === 'AC') ? (item.cold_storage_name || item.coldStorageName || '') : ''
         };
       })
       // Absolute guarantee: filter strictly by current sub route slug in memory
@@ -648,12 +667,23 @@ export async function syncAllToSupabase(): Promise<{ success: boolean; message: 
       gross_weight: tx.grossWeight !== undefined && tx.grossWeight !== null ? Number(tx.grossWeight) : null,
       bags_weight: tx.bagsWeight !== undefined && tx.bagsWeight !== null ? Number(tx.bagsWeight) : null,
       net_weight: tx.netWeight !== undefined && tx.netWeight !== null ? Number(tx.netWeight) : null,
-      calculated_amount: tx.calculatedAmount !== undefined && tx.calculatedAmount !== null ? Number(tx.calculatedAmount) : null
+      calculated_amount: tx.calculatedAmount !== undefined && tx.calculatedAmount !== null ? Number(tx.calculatedAmount) : null,
+      storage_type: tx.storageType || 'NON AC',
+      cold_storage_name: tx.storageType === 'AC' ? (tx.coldStorageName || '') : ''
     }));
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from('transactions')
       .upsert(rows, { onConflict: 'transaction_id' });
+
+    if (error && error.message && (
+      error.message.includes('storage_type') || 
+      error.message.includes('cold_storage_name')
+    )) {
+      const fallbackRows = rows.map(({ storage_type, cold_storage_name, ...rest }: any) => rest);
+      const res = await supabase.from('transactions').upsert(fallbackRows, { onConflict: 'transaction_id' });
+      error = res.error;
+    }
 
     if (error) {
       throw new Error(error.message);
@@ -717,12 +747,23 @@ export async function addTransaction(
       gross_weight: newTx.grossWeight !== undefined && newTx.grossWeight !== null ? Number(newTx.grossWeight) : null,
       bags_weight: newTx.bagsWeight !== undefined && newTx.bagsWeight !== null ? Number(newTx.bagsWeight) : null,
       net_weight: newTx.netWeight !== undefined && newTx.netWeight !== null ? Number(newTx.netWeight) : null,
-      calculated_amount: newTx.calculatedAmount !== undefined && newTx.calculatedAmount !== null ? Number(newTx.calculatedAmount) : null
+      calculated_amount: newTx.calculatedAmount !== undefined && newTx.calculatedAmount !== null ? Number(newTx.calculatedAmount) : null,
+      storage_type: newTx.storageType || 'NON AC',
+      cold_storage_name: newTx.storageType === 'AC' ? (newTx.coldStorageName || '').trim() : ''
     };
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from('transactions')
       .upsert(supabaseRow, { onConflict: 'transaction_id' });
+
+    if (error && error.message && (
+      error.message.includes('storage_type') || 
+      error.message.includes('cold_storage_name')
+    )) {
+      const { storage_type, cold_storage_name, ...fallbackRow } = supabaseRow;
+      const res = await supabase.from('transactions').upsert(fallbackRow, { onConflict: 'transaction_id' });
+      error = res.error;
+    }
 
     if (error) {
       throw new Error(error.message);
@@ -968,6 +1009,11 @@ export async function editTransaction(
     }
   }
 
+  const updatedStorageType = updatedData.storageType !== undefined ? updatedData.storageType : (existing?.storageType || 'NON AC');
+  const updatedColdStorageName = updatedStorageType === 'AC' 
+    ? (updatedData.coldStorageName !== undefined ? updatedData.coldStorageName : (existing?.coldStorageName || '')) 
+    : '';
+
   const updatedTx: Transaction = {
     ...(existing || {} as Transaction),
     ...updatedData,
@@ -978,6 +1024,8 @@ export async function editTransaction(
     rate: rateVal,
     agent: agentVal,
     mark: markVal,
+    storageType: updatedStorageType,
+    coldStorageName: updatedColdStorageName,
     totalValue: isWeightPending(existing) ? 0 : (bagsVal * (existing?.subUserRate || rateVal))
   };
 
@@ -999,43 +1047,61 @@ export async function editTransaction(
         bags: bagsVal,
         rate: rateVal,
         agent: agentVal,
-        mark: markVal
+        mark: markVal,
+        storage_type: updatedStorageType,
+        cold_storage_name: updatedColdStorageName
       };
 
       if (updatedData.rateReason !== undefined) {
         supabaseRow.rate_reason = updatedData.rateReason;
       }
 
-      if (newTransactionId !== originalTransactionId) {
-        const { data: oldRow } = await supabase
-          .from('transactions')
-          .select('*')
-          .eq('transaction_id', originalTransactionId)
-          .single();
+      const runUpdate = async (row: any) => {
+        if (newTransactionId !== originalTransactionId) {
+          const { data: oldRow } = await supabase
+            .from('transactions')
+            .select('*')
+            .eq('transaction_id', originalTransactionId)
+            .single();
 
-        const fullNewRow = {
-          ...(oldRow || {}),
-          ...supabaseRow,
-          transaction_id: newTransactionId
-        };
+          const fullNewRow = {
+            ...(oldRow || {}),
+            ...row,
+            transaction_id: newTransactionId
+          };
 
-        const { error: insertErr } = await supabase
-          .from('transactions')
-          .upsert(fullNewRow, { onConflict: 'transaction_id' });
+          const { error: insertErr } = await supabase
+            .from('transactions')
+            .upsert(fullNewRow, { onConflict: 'transaction_id' });
 
-        if (insertErr) throw insertErr;
+          if (insertErr) throw insertErr;
 
-        await supabase
-          .from('transactions')
-          .delete()
-          .eq('transaction_id', originalTransactionId);
-      } else {
-        const { error: updateErr } = await supabase
-          .from('transactions')
-          .update(supabaseRow)
-          .eq('transaction_id', originalTransactionId);
+          await supabase
+            .from('transactions')
+            .delete()
+            .eq('transaction_id', originalTransactionId);
+        } else {
+          const { error: updateErr } = await supabase
+            .from('transactions')
+            .update(row)
+            .eq('transaction_id', originalTransactionId);
 
-        if (updateErr) throw updateErr;
+          if (updateErr) throw updateErr;
+        }
+      };
+
+      try {
+        await runUpdate(supabaseRow);
+      } catch (colErr: any) {
+        if (colErr?.message && (
+          colErr.message.includes('storage_type') || 
+          colErr.message.includes('cold_storage_name')
+        )) {
+          const { storage_type, cold_storage_name, ...cleanRow } = supabaseRow;
+          await runUpdate(cleanRow);
+        } else {
+          throw colErr;
+        }
       }
 
       return {

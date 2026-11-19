@@ -13,7 +13,10 @@ import {
   Tag, 
   Users, 
   Hash, 
-  IndianRupee 
+  IndianRupee,
+  Snowflake,
+  Warehouse,
+  Wind
 } from 'lucide-react';
 import type { Transaction } from '../services/sheetService';
 import { 
@@ -62,8 +65,10 @@ interface AddTransactionModalProps {
   onClose: () => void;
   onAddTransaction?: (tx: Omit<Transaction, 'totalValue'>) => Promise<{ success: boolean; message: string; data?: Transaction }>;
   transactions: Transaction[];
+  initialDate?: string;
   availableMarks?: string[];
   availableAgents?: string[];
+  availableColdStorages?: string[];
   onSuccess?: () => void;
 }
 
@@ -72,14 +77,16 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   onClose,
   onAddTransaction,
   transactions,
+  initialDate,
   availableMarks = [],
   availableAgents = [],
+  availableColdStorages = [],
   onSuccess
 }) => {
   const currentTenant = getCurrentTenant();
 
   // Form Fields State
-  const [date, setDate] = useState<string>(() => getTodayISTString());
+  const [date, setDate] = useState<string>(() => initialDate || getTodayISTString());
   const [lot, setLot] = useState('');
   const [bags, setBags] = useState('');
   const [rate, setRate] = useState('');
@@ -88,12 +95,16 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     const marks = currentTenant?.marks || availableMarks || [];
     return marks.length > 0 ? marks[0] : 'BRT';
   });
+  const [storageType, setStorageType] = useState<'NON AC' | 'AC'>('NON AC');
+  const [coldStorageName, setColdStorageName] = useState('');
 
   // Autocomplete Dropdowns
   const [isAgentDropdownOpen, setIsAgentDropdownOpen] = useState(false);
   const [isMarkDropdownOpen, setIsMarkDropdownOpen] = useState(false);
+  const [isColdStorageDropdownOpen, setIsColdStorageDropdownOpen] = useState(false);
   const agentDropdownRef = useRef<HTMLDivElement>(null);
   const markDropdownRef = useRef<HTMLDivElement>(null);
+  const coldStorageDropdownRef = useRef<HTMLDivElement>(null);
 
   // Live timestamp
   const [liveTimestamp, setLiveTimestamp] = useState<Date>(new Date());
@@ -114,10 +125,36 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     rate: number;
     agent: string;
     mark: string;
+    storageType: 'NON AC' | 'AC';
+    coldStorageName: string;
   } | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Reset form when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      if (initialDate) {
+        setDate(initialDate);
+      } else {
+        setDate(getTodayISTString());
+      }
+      setLot('');
+      setBags('');
+      setRate('');
+      setAgent('');
+      const marks = currentTenant?.marks || availableMarks || [];
+      setMark(marks.length > 0 ? marks[0] : 'BRT');
+      setStorageType('NON AC');
+      setColdStorageName('');
+      setFormError('');
+      setConflictTransaction(null);
+      setIsAgentDropdownOpen(false);
+      setIsMarkDropdownOpen(false);
+      setIsColdStorageDropdownOpen(false);
+    }
+  }, [isOpen, initialDate, currentTenant?.subUrl]);
 
   // Update live clock every second while modal is open
   useEffect(() => {
@@ -147,6 +184,9 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       }
       if (markDropdownRef.current && !markDropdownRef.current.contains(e.target as Node)) {
         setIsMarkDropdownOpen(false);
+      }
+      if (coldStorageDropdownRef.current && !coldStorageDropdownRef.current.contains(e.target as Node)) {
+        setIsColdStorageDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -187,6 +227,25 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
     const q = mark.trim().toLowerCase();
     return allMarks.filter(m => m.toLowerCase().includes(q));
   }, [allMarks, mark]);
+
+  // Compute available cold storages
+  const allColdStorages = useMemo(() => {
+    const fromTenant = currentTenant?.coldStorages || [];
+    const fromProps = availableColdStorages || [];
+    const fromTxs = transactions.map(t => t.coldStorageName).filter(Boolean) as string[];
+    const set = new Set<string>();
+    [...fromTenant, ...fromProps, ...fromTxs].forEach(cs => {
+      const clean = (cs || '').trim();
+      if (clean) set.add(clean);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [currentTenant, availableColdStorages, transactions]);
+
+  const filteredColdStorages = useMemo(() => {
+    if (!coldStorageName.trim()) return allColdStorages;
+    const q = coldStorageName.trim().toLowerCase();
+    return allColdStorages.filter(cs => cs.toLowerCase().includes(q));
+  }, [allColdStorages, coldStorageName]);
 
   // Check lot conflict for current date and lot
   const checkLotConflict = (lotVal: string, dateVal: string) => {
@@ -253,6 +312,11 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       return;
     }
 
+    if (storageType === 'AC' && !coldStorageName.trim()) {
+      setFormError('Cold storage name is required when AC is selected.');
+      return;
+    }
+
     // Double check conflict on submit
     const conflict = transactions.find(t => t.date === date && t.lot.toLowerCase() === lotVal.toLowerCase());
     if (conflict) {
@@ -277,7 +341,9 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       bags: parsedBags,
       rate: parsedRate,
       agent: agent.trim(),
-      mark: markVal
+      mark: markVal,
+      storageType,
+      coldStorageName: storageType === 'AC' ? coldStorageName.trim() : ''
     });
 
     setIsReviewOpen(true);
@@ -298,6 +364,8 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
       rate: reviewData.rate,
       agent: reviewData.agent,
       mark: reviewData.mark,
+      storageType: reviewData.storageType,
+      coldStorageName: reviewData.coldStorageName,
       weight: "" // Omitted from owner view, sub-user fills this later
     };
 
@@ -329,6 +397,21 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
           await updateBranchConfiguration(currentTenant.subUrl, { marks: updatedMarks });
         } catch (err) {
           console.warn('Failed to auto-save new mark to database:', err);
+        }
+      }
+
+      // 3. Auto-save new cold storage name to branch configuration if novel
+      if (reviewData.storageType === 'AC' && reviewData.coldStorageName) {
+        const trimmedStorage = reviewData.coldStorageName.trim();
+        const currentStorages = currentTenant?.coldStorages || [];
+        const isStorageKnown = currentStorages.some(s => s.trim().toLowerCase() === trimmedStorage.toLowerCase());
+        if (!isStorageKnown && trimmedStorage && currentTenant?.subUrl) {
+          const updatedStorages = [...currentStorages, trimmedStorage];
+          try {
+            await updateBranchConfiguration(currentTenant.subUrl, { coldStorages: updatedStorages });
+          } catch (err) {
+            console.warn('Failed to auto-save new cold storage to database:', err);
+          }
         }
       }
 
@@ -687,6 +770,146 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 )}
               </div>
 
+              {/* Storage Type (AC vs NON AC) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    <Snowflake className="h-3.5 w-3.5 text-slate-400" />
+                    <span>Storage Type</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-medium">Default: NON AC</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStorageType('NON AC');
+                      setColdStorageName('');
+                      setIsColdStorageDropdownOpen(false);
+                    }}
+                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      storageType === 'NON AC'
+                        ? 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800'
+                    }`}
+                  >
+                    <Wind className={`h-4 w-4 ${storageType === 'NON AC' ? 'text-slate-300' : 'text-slate-400'}`} />
+                    <span>NON AC</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStorageType('AC');
+                      setIsColdStorageDropdownOpen(true);
+                    }}
+                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      storageType === 'AC'
+                        ? 'bg-sky-600 border-sky-600 text-white shadow-md shadow-sky-600/25 ring-2 ring-sky-300'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800'
+                    }`}
+                  >
+                    <Snowflake className={`h-4 w-4 ${storageType === 'AC' ? 'text-white' : 'text-sky-500'}`} />
+                    <span>AC (Cold Storage)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Conditionally rendered Cold Storage Name when AC is selected */}
+              {storageType === 'AC' && (
+                <div className="relative animate-fade-in" ref={coldStorageDropdownRef}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-sky-800 uppercase tracking-wider flex items-center gap-1">
+                      <Warehouse className="h-3.5 w-3.5 text-sky-600" />
+                      <span>Cold Storage Name</span>
+                    </label>
+                    {coldStorageName.trim() && (
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border font-mono ${
+                        allColdStorages.some(s => s.toLowerCase() === coldStorageName.trim().toLowerCase())
+                          ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                          : 'text-indigo-700 bg-indigo-50 border-indigo-200'
+                      }`}>
+                        {allColdStorages.some(s => s.toLowerCase() === coldStorageName.trim().toLowerCase())
+                          ? 'Existing Cold Storage'
+                          : '+ New Cold Storage'}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required={storageType === 'AC'}
+                      placeholder="Search or enter cold storage name (e.g. Royal Cold Storage)"
+                      value={coldStorageName}
+                      onChange={(e) => {
+                        setColdStorageName(e.target.value);
+                        setIsColdStorageDropdownOpen(true);
+                      }}
+                      onFocus={() => setIsColdStorageDropdownOpen(true)}
+                      className="w-full px-4 py-2.5 pr-10 bg-sky-50/50 border border-sky-300 rounded-xl focus:bg-white text-sm font-semibold text-slate-800 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all placeholder:text-slate-400"
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onClick={() => setIsColdStorageDropdownOpen(prev => !prev)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors cursor-pointer"
+                      title="Toggle Cold Storage Suggestions"
+                    >
+                      <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isColdStorageDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
+
+                  {/* Cold Storage Dropdown Menu */}
+                  {isColdStorageDropdownOpen && (
+                    <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-52 overflow-y-auto overscroll-contain animate-fade-in p-1.5 space-y-0.5">
+                      {filteredColdStorages.length > 0 ? (
+                        filteredColdStorages.map((item) => {
+                          const isSelected = item.toLowerCase() === coldStorageName.trim().toLowerCase();
+                          return (
+                            <div
+                              key={item}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setColdStorageName(item);
+                                setIsColdStorageDropdownOpen(false);
+                              }}
+                              className={`px-3 py-2 text-xs font-semibold rounded-xl cursor-pointer transition-all flex items-center justify-between ${
+                                isSelected 
+                                  ? 'bg-sky-50 text-sky-800 font-bold' 
+                                  : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <Snowflake className="h-3 w-3 text-sky-500 shrink-0" />
+                                <span className="break-words">{item}</span>
+                              </div>
+                              {isSelected && <Check className="h-3.5 w-3.5 text-sky-600 shrink-0" />}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="p-2.5 text-center text-xs text-slate-400 font-medium">
+                          {allColdStorages.length === 0 ? 'No cold storages configured in branch setting yet' : `No cold storages matching "${coldStorageName}"`}
+                        </div>
+                      )}
+
+                      {coldStorageName.trim() && !allColdStorages.some(s => s.toLowerCase() === coldStorageName.trim().toLowerCase()) && (
+                        <div
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setIsColdStorageDropdownOpen(false);
+                          }}
+                          className="mt-1 pt-1 border-t border-slate-100 px-3 py-2 bg-sky-50 hover:bg-sky-100 text-sky-800 rounded-xl cursor-pointer text-xs font-bold flex items-center gap-1.5 transition-colors"
+                        >
+                          <Plus className="h-3.5 w-3.5 text-sky-600 shrink-0" />
+                          <span className="truncate">Add new cold storage: <strong>"{coldStorageName.trim()}"</strong></span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Weight Restriction Notice */}
               <div className="bg-amber-50/60 border border-amber-100 p-3 rounded-xl flex gap-2 text-[10px] text-amber-800 leading-normal">
                 <Lock className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
@@ -750,6 +973,28 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 <span className="text-slate-400 block font-semibold uppercase tracking-wider text-[10px]">Bags & Rate</span>
                 <span className="text-slate-800 font-semibold font-mono mt-0.5 block">
                   {reviewData.bags} Bags @ {formatINR(reviewData.rate)}
+                </span>
+              </div>
+              <div className="sm:border-r border-slate-100 sm:pr-2 pt-1 border-t border-slate-50">
+                <span className="text-slate-400 block font-semibold uppercase tracking-wider text-[10px]">Storage Type</span>
+                <span className="mt-0.5 inline-flex items-center gap-1 font-bold">
+                  {reviewData.storageType === 'AC' ? (
+                    <span className="text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200 inline-flex items-center gap-1 text-[11px]">
+                      <Snowflake className="h-3 w-3 text-sky-500" />
+                      AC (Cold Storage)
+                    </span>
+                  ) : (
+                    <span className="text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 inline-flex items-center gap-1 text-[11px]">
+                      <Wind className="h-3 w-3 text-slate-400" />
+                      NON AC
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div className="sm:pl-2 pt-1 border-t border-slate-50">
+                <span className="text-slate-400 block font-semibold uppercase tracking-wider text-[10px]">Cold Storage</span>
+                <span className="text-slate-800 font-bold mt-0.5 block truncate">
+                  {reviewData.storageType === 'AC' ? (reviewData.coldStorageName || 'Not specified') : 'N/A (NON AC)'}
                 </span>
               </div>
             </div>
@@ -825,6 +1070,12 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
                 <div className="text-slate-800 font-bold font-mono">{formatINR(conflictTransaction.rate)}</div>
                 <div>Mark:</div>
                 <div className="text-slate-800 font-bold uppercase">{conflictTransaction.mark}</div>
+                <div>Storage:</div>
+                <div className="text-slate-800 font-bold">
+                  {conflictTransaction.storageType === 'AC' 
+                    ? `AC (${conflictTransaction.coldStorageName || 'Cold Storage'})` 
+                    : 'NON AC'}
+                </div>
                 <div>Weight Status:</div>
                 <div className="text-slate-800 font-bold font-mono">{conflictTransaction.weight || 'Pending'}</div>
               </div>

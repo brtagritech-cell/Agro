@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Scale, Info, Printer, User } from 'lucide-react';
+import { X, Scale, Info, Printer, User, Snowflake } from 'lucide-react';
 import type { Transaction } from '../services/sheetService';
 import { getCurrentTenant } from '../services/sheetService';
 
@@ -126,6 +126,7 @@ export const ViewWeightDetailsModal: React.FC<ViewWeightDetailsModalProps> = ({
               <div><strong>DATE:</strong> {transaction.date}</div>
               <div><strong>AGENT NAME:</strong> {transaction.agent}</div>
               <div><strong>BRAND / MARK:</strong> {transaction.mark}</div>
+              <div><strong>STORAGE:</strong> {transaction.storageType === 'AC' ? `AC (${transaction.coldStorageName || 'Cold Storage'})` : 'NON AC'}</div>
               <div><strong>TOTAL BAGS:</strong> {totalBags} Bags</div>
               <div><strong>OWNER RATE:</strong> {formatINR(transaction.rate)}</div>
               <div><strong>SUB-USER RATE:</strong> {transaction.subUserRate ? formatINR(transaction.subUserRate) : 'Pending'}</div>
@@ -254,6 +255,19 @@ export const ViewWeightDetailsModal: React.FC<ViewWeightDetailsModalProps> = ({
                     <User className="h-2.5 w-2.5 text-indigo-600" />
                     {transaction.subUserName || 'Pending'}
                   </span>
+                </div>
+                <div className="col-span-2 flex items-center gap-1.5">
+                  <span>Storage:</span>
+                  {transaction.storageType === 'AC' ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] sm:text-[11px] bg-cyan-100 text-cyan-900 border border-cyan-300">
+                      <Snowflake className="w-3 h-3 text-cyan-700" />
+                      AC {transaction.coldStorageName ? `(${transaction.coldStorageName})` : ''}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-semibold text-[10px] sm:text-[11px] bg-slate-100 text-slate-700 border border-slate-200">
+                      NON AC
+                    </span>
+                  )}
                 </div>
                 {transaction.rateReason && (
                   <div className="col-span-2 text-rose-700 font-semibold bg-rose-50 px-2 py-0.5 rounded border border-rose-100 text-[10px] sm:text-[11px] truncate">

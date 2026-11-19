@@ -13,7 +13,8 @@ import {
   Printer,
   Pencil,
   Trash2,
-  Plus
+  Plus,
+  Snowflake
 } from 'lucide-react';
 import { 
   type Transaction, 
@@ -143,6 +144,18 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
     return Array.from(set).sort();
   }, [transactions, currentTenant]);
 
+  // Dynamic available cold storages from transactions and tenant configuration
+  const availableColdStorages = useMemo(() => {
+    const set = new Set<string>();
+    transactions.forEach(tx => {
+      if (tx.coldStorageName && tx.coldStorageName.trim()) set.add(tx.coldStorageName.trim());
+    });
+    (currentTenant?.coldStorages || []).forEach(cs => {
+      if (cs && cs.trim()) set.add(cs.trim());
+    });
+    return Array.from(set).sort();
+  }, [transactions, currentTenant]);
+
   // Dynamic Sub-Users list and lot count statistics
   const subUserStats = useMemo(() => {
     const map = new Map<string, number>();
@@ -185,7 +198,9 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
       tx.agent.toLowerCase().includes(searchTerm.toLowerCase()) ||
       tx.transactionId.toLowerCase().includes(searchTerm.toLowerCase()) ||
       tx.lot.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (tx.subUserName && tx.subUserName.toLowerCase().includes(searchTerm.toLowerCase()));
+      (tx.subUserName && tx.subUserName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (tx.storageType && tx.storageType.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (tx.coldStorageName && tx.coldStorageName.toLowerCase().includes(searchTerm.toLowerCase()));
       
     const matchesMark = selectedMark === '' || tx.mark === selectedMark;
     const matchesDate = 
@@ -702,9 +717,17 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                 
                 <div className="flex justify-between items-start gap-2 pl-1 sm:pl-2">
                   <div className="min-w-0">
-                    <span className="text-[10px] font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-bold">
-                      LOT #{tx.lot}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-bold">
+                        LOT #{tx.lot}
+                      </span>
+                      {tx.storageType === 'AC' && (
+                        <span className="text-[10px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-md flex items-center gap-1" title={tx.coldStorageName ? `Cold Storage: ${tx.coldStorageName}` : 'AC Lot'}>
+                          <Snowflake className="w-3 h-3 text-sky-500" />
+                          <span>AC{tx.coldStorageName ? ` (${tx.coldStorageName})` : ''}</span>
+                        </span>
+                      )}
+                    </div>
                     <h3 className="font-mono text-xs sm:text-sm font-bold text-slate-800 mt-1 select-all break-all">
                       {tx.transactionId}
                     </h3>
@@ -855,7 +878,17 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
                 <tbody className="divide-y divide-slate-100 text-xs xl:text-sm font-medium text-slate-700">
                   {filteredTransactions.map((tx) => (
                     <tr key={tx.transactionId} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="py-3.5 px-3 font-mono text-slate-800 select-all whitespace-nowrap">{tx.transactionId}</td>
+                      <td className="py-3.5 px-3 font-mono text-slate-800 select-all whitespace-nowrap">
+                        <div className="flex flex-col gap-0.5">
+                          <span>{tx.transactionId}</span>
+                          {tx.storageType === 'AC' && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-1.5 py-0.2 rounded w-fit" title={tx.coldStorageName ? `Cold Storage: ${tx.coldStorageName}` : 'AC'}>
+                              <Snowflake className="w-2.5 h-2.5 text-sky-500" />
+                              AC{tx.coldStorageName ? ` • ${tx.coldStorageName}` : ''}
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="py-3.5 px-3 font-mono text-slate-500 whitespace-nowrap">{tx.date}</td>
                       <td className="py-3.5 px-3 text-right font-mono text-slate-900 whitespace-nowrap">{tx.bags.toLocaleString()}</td>
                       <td className="py-3.5 px-3 text-right font-mono text-slate-600 whitespace-nowrap">{formatINR(tx.rate)}</td>
@@ -1096,6 +1129,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
           onSave={handleEditSave}
           availableMarks={availableMarks}
           availableAgents={availableAgents}
+          availableColdStorages={availableColdStorages}
         />
       )}
 
@@ -1118,6 +1152,7 @@ export const MasterDataGrid: React.FC<MasterDataGridProps> = ({
           transactions={transactions}
           availableMarks={availableMarks}
           availableAgents={availableAgents}
+          availableColdStorages={availableColdStorages}
           onSuccess={() => {
             onRefresh();
           }}

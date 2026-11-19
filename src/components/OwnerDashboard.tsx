@@ -19,7 +19,10 @@ import {
   ChevronDown,
   Check,
   Scale,
-  Pencil
+  Pencil,
+  Snowflake,
+  Warehouse,
+  Wind
 } from 'lucide-react';
 import { 
   type Transaction, 
@@ -34,6 +37,7 @@ import {
 } from '../services/sheetService';
 import { ViewWeightDetailsModal } from './ViewWeightDetailsModal';
 import { EditTransactionModal } from './EditTransactionModal';
+import { AddTransactionModal } from './AddTransactionModal';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { SupabaseConnectModal } from './SupabaseConnectModal';
 
@@ -126,7 +130,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
   // Branch Settings & Master Data Modal states
   const [isMasterDataOpen, setIsMasterDataOpen] = useState(false);
-  const [masterTab, setModalTab] = useState<'subusers' | 'marks' | 'agents' | 'pricing'>('subusers');
+  const [masterTab, setModalTab] = useState<'subusers' | 'marks' | 'agents' | 'coldstorages' | 'pricing'>('subusers');
 
   // Sub-Users state
   const [branchSubUsers, setBranchSubUsers] = useState<{ name: string; password: string }[]>([]);
@@ -143,6 +147,11 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   const [branchAgents, setBranchAgents] = useState<string[]>([]);
   const [newBranchAgent, setNewBranchAgent] = useState('');
   const [branchAgentError, setBranchAgentError] = useState('');
+
+  // Cold Storages state
+  const [branchColdStorages, setBranchColdStorages] = useState<string[]>([]);
+  const [newBranchColdStorage, setNewBranchColdStorage] = useState('');
+  const [branchColdStorageError, setBranchColdStorageError] = useState('');
 
   // Available commission agents: from tenant configuration + all already entered transactions
   const availableAgents = useMemo(() => {
@@ -180,6 +189,18 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     return availableMarks.filter(m => m.toLowerCase().includes(q));
   }, [availableMarks, mark]);
 
+  // Available cold storages: strictly from this branch configuration + already entered transactions
+  const availableColdStorages = useMemo(() => {
+    const fromTenant = tenant?.coldStorages || currentTenant?.coldStorages || branchColdStorages || [];
+    const fromTxs = transactions.map(t => t.coldStorageName).filter(Boolean) as string[];
+    const set = new Set<string>();
+    [...fromTenant, ...fromTxs].forEach(cs => {
+      const clean = (cs || '').trim();
+      if (clean) set.add(clean);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [tenant, currentTenant, branchColdStorages, transactions]);
+
   // Close dropdowns on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -206,7 +227,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     setMasterTaram(String(tenant.taram ?? 1.100));
   }, [tenant.subUrl, tenant.bagCost, tenant.taram]);
 
-  const openBranchSettingsModal = (initialTab: 'subusers' | 'marks' | 'agents' | 'pricing' = 'subusers') => {
+  const openBranchSettingsModal = (initialTab: 'subusers' | 'marks' | 'agents' | 'coldstorages' | 'pricing' = 'subusers') => {
     const t = getCurrentTenant();
     setTenant(t);
     setModalTab(initialTab);
@@ -228,6 +249,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     setBranchAgents([...(t.agents || [])]);
     setNewBranchAgent('');
     setBranchAgentError('');
+
+    setBranchColdStorages([...(t.coldStorages || [])]);
+    setNewBranchColdStorage('');
+    setBranchColdStorageError('');
 
     setMasterBagCost(String(t.bagCost ?? 25));
     setMasterTaram(String(t.taram ?? 1.100));
@@ -326,6 +351,25 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     setBranchAgents(prev => prev.filter((_, i) => i !== index));
   };
 
+  const handleAddBranchColdStorage = () => {
+    const trimmed = newBranchColdStorage.trim();
+    if (!trimmed) {
+      setBranchColdStorageError('Please enter a cold storage name before adding.');
+      return;
+    }
+    if (branchColdStorages.some(cs => cs.toLowerCase() === trimmed.toLowerCase())) {
+      setBranchColdStorageError(`Cold Storage "${trimmed}" is already added for this branch.`);
+      return;
+    }
+    setBranchColdStorages(prev => [...prev, trimmed]);
+    setNewBranchColdStorage('');
+    setBranchColdStorageError('');
+  };
+
+  const handleRemoveBranchColdStorage = (index: number) => {
+    setBranchColdStorages(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSaveBranchSettings = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setMasterError('');
@@ -363,6 +407,14 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
       if (!finalAgents.includes(pa)) finalAgents.push(pa);
     }
 
+    let finalColdStorages = [...branchColdStorages];
+    if (newBranchColdStorage.trim()) {
+      const pcs = newBranchColdStorage.trim();
+      if (!finalColdStorages.some(s => s.toLowerCase() === pcs.toLowerCase())) {
+        finalColdStorages.push(pcs);
+      }
+    }
+
     let finalSubUsersList = [...branchSubUsers];
     if (newBranchSubUserName.trim()) {
       finalSubUsersList.push({
@@ -391,6 +443,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
         subUserPasswords,
         marks: finalMarks,
         agents: finalAgents,
+        coldStorages: finalColdStorages,
         bagCost: parsedCost,
         taram: parsedTaram
       });
@@ -915,9 +968,17 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                   >
                     <div className="flex justify-between items-center gap-2">
                       <span className="font-mono font-bold text-slate-800 tracking-tight select-all break-all text-xs">{tx.transactionId}</span>
-                      <span className="font-bold text-[9px] uppercase px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded shrink-0">
-                        {tx.mark}
-                      </span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {tx.storageType === 'AC' && (
+                          <span className="font-bold text-[9px] uppercase px-1.5 py-0.5 bg-sky-100 text-sky-800 border border-sky-200 rounded flex items-center gap-0.5" title={tx.coldStorageName ? `Cold Storage: ${tx.coldStorageName}` : 'AC'}>
+                            <Snowflake className="w-2.5 h-2.5 text-sky-600" />
+                            AC{tx.coldStorageName ? ` • ${tx.coldStorageName}` : ''}
+                          </span>
+                        )}
+                        <span className="font-bold text-[9px] uppercase px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded">
+                          {tx.mark}
+                        </span>
+                      </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] text-slate-500">
                       <div>Agent: <span className="font-semibold text-slate-800 break-words">{tx.agent}</span></div>
@@ -976,446 +1037,21 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
         </div>
       </div>
 
-      {/* Slide-Up Bottom Sheet Form Modal */}
-      {isFormOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in">
-          {/* Close tap overlay */}
-          <div className="absolute inset-0" onClick={() => setIsFormOpen(false)} />
-          
-          {/* Bottom Sheet Container */}
-          <div className="w-full max-w-lg md:max-w-xl bg-white rounded-t-3xl sm:rounded-3xl shadow-premium border-t sm:border border-slate-100 flex flex-col max-h-[92dvh] sm:max-h-[90vh] z-10 animate-slide-up overflow-hidden">
-            {/* Mobile Sheet Drag Handle */}
-            <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mt-2.5 sm:hidden shrink-0" />
-            
-            {/* Header */}
-            <div className="flex justify-between items-center border-b border-slate-100 px-4 py-3 sm:px-6 shrink-0">
-              <div>
-                <h3 className="text-base sm:text-lg font-bold text-slate-800">Add New Entry</h3>
-                <p className="text-xs text-slate-500">Ledger transaction recording panel</p>
-              </div>
-              <button 
-                onClick={() => setIsFormOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-all cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Error alerts */}
-            {formError && (
-              <div className="mx-4 sm:mx-6 mt-3 p-3 sm:p-3.5 bg-rose-50 text-rose-800 border border-rose-100 rounded-xl flex gap-2 text-xs font-medium shrink-0">
-                <AlertTriangle className="h-4.5 w-4.5 text-rose-600 shrink-0 mt-0.5" />
-                <span>{formError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleFormSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-              {/* Scrollable Form Body with Smooth Touch Pan */}
-              <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-4 touch-pan-y" style={{ WebkitOverflowScrolling: 'touch' }}>
-              
-              {/* Strict locked timestamp display */}
-              <div className="bg-slate-50 border border-slate-200/50 p-3 sm:p-3.5 rounded-xl flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
-                  <div>
-                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Locked Entry Timestamp</span>
-                    <span className="text-xs font-mono text-slate-700 font-bold mt-0.5 block break-all">
-                      {formatLiveClock(liveTimestamp)}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 text-[9px] sm:text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-semibold border border-emerald-100/50 uppercase select-none shrink-0">
-                  <Lock className="h-3 w-3" />
-                  <span>SECURE LOCK</span>
-                </div>
-              </div>
-
-              {/* Lot Number (Alphanumeric) */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Lot Number
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. 1, 12A, 22B"
-                  value={lot}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setLot(val);
-                    checkLotConflict(val);
-                  }}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-medium"
-                />
-              </div>
-
-              {/* Number of Bags (Integer) */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Number of Bags (Integer)
-                </label>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  step="1"
-                  min="1"
-                  required
-                  placeholder="e.g. 450"
-                  value={bags}
-                  onChange={(e) => setBags(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-medium"
-                />
-              </div>
-
-              {/* Rate per Bag (Decimal) */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Amount / Rate per Bag (₹ INR)
-                </label>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0.01"
-                  required
-                  placeholder="e.g. 52.00"
-                  value={rate}
-                  onChange={(e) => setRate(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-medium font-mono"
-                />
-              </div>
-
-              {/* Commission Agent Name with Dropdown Search */}
-              <div className="relative" ref={agentDropdownRef}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    Commission Agent Name
-                  </label>
-                  {agent.trim() && (
-                    <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border font-mono ${
-                      availableAgents.some(a => a.toLowerCase() === agent.trim().toLowerCase())
-                        ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                        : 'text-indigo-700 bg-indigo-50 border-indigo-200'
-                    }`}>
-                      {availableAgents.some(a => a.toLowerCase() === agent.trim().toLowerCase()) 
-                        ? 'Existing Agent' 
-                        : '+ New (Will Save to DB)'}
-                    </span>
-                  )}
-                </div>
-
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    placeholder="Search or enter agent name (e.g. Ramesh Kumar)"
-                    value={agent}
-                    onChange={(e) => {
-                      setAgent(e.target.value);
-                      setIsAgentDropdownOpen(true);
-                    }}
-                    onFocus={() => setIsAgentDropdownOpen(true)}
-                    className="w-full px-4 py-2.5 pr-10 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-medium focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 transition-all"
-                  />
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    onClick={() => setIsAgentDropdownOpen(prev => !prev)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors cursor-pointer"
-                    title="Toggle Agent Suggestions"
-                  >
-                    <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isAgentDropdownOpen ? 'rotate-180' : ''}`} />
-                  </button>
-                </div>
-
-                {/* Dropdown Suggestions Menu */}
-                {isAgentDropdownOpen && (
-                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-52 overflow-y-auto overscroll-contain animate-fade-in p-1.5 space-y-0.5">
-                    {filteredAgents.length > 0 ? (
-                      filteredAgents.map((item) => {
-                        const isSelected = item.toLowerCase() === agent.trim().toLowerCase();
-                        return (
-                          <div
-                            key={item}
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              setAgent(item);
-                              setIsAgentDropdownOpen(false);
-                            }}
-                            className={`px-3 py-2 text-xs font-semibold rounded-xl cursor-pointer transition-all flex items-center justify-between ${
-                              isSelected 
-                                ? 'bg-indigo-50 text-indigo-800 font-bold' 
-                                : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-                            }`}
-                          >
-                            <span className="break-words">{item}</span>
-                            {isSelected && <Check className="h-3.5 w-3.5 text-indigo-600 shrink-0" />}
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="p-2.5 text-center text-xs text-slate-400 font-medium">
-                        No existing agents matching "{agent}"
-                      </div>
-                    )}
-
-                    {agent.trim() && !availableAgents.some(a => a.toLowerCase() === agent.trim().toLowerCase()) && (
-                      <div
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          setIsAgentDropdownOpen(false);
-                        }}
-                        className="mt-1 pt-1 border-t border-slate-100 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 rounded-xl cursor-pointer text-xs font-bold flex items-center gap-1.5 transition-colors"
-                      >
-                        <Plus className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
-                        <span className="truncate">Add & save new agent: <strong>"{agent.trim()}"</strong></span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Brand Name / Mark with Dropdown Search */}
-              <div className="relative" ref={markDropdownRef}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    Brand Name / Mark
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => openBranchSettingsModal('marks')}
-                    className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition-colors cursor-pointer"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>Manage Marks</span>
-                  </button>
-                </div>
-
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    placeholder="Search or enter Brand Mark (e.g. BRT, AGRO)"
-                    value={mark}
-                    onChange={(e) => {
-                      setMark(e.target.value.toUpperCase());
-                      setIsMarkDropdownOpen(true);
-                    }}
-                    onFocus={() => setIsMarkDropdownOpen(true)}
-                    className="w-full px-4 py-2.5 pr-10 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white text-sm font-bold uppercase font-mono focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 transition-all"
-                  />
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    onClick={() => setIsMarkDropdownOpen(prev => !prev)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors cursor-pointer"
-                    title="Toggle Mark Suggestions"
-                  >
-                    <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isMarkDropdownOpen ? 'rotate-180' : ''}`} />
-                  </button>
-                </div>
-
-                {/* Mark Dropdown Menu */}
-                {isMarkDropdownOpen && (
-                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-52 overflow-y-auto overscroll-contain animate-fade-in p-1.5 space-y-0.5">
-                    {filteredMarks.length > 0 ? (
-                      filteredMarks.map((item) => {
-                        const isSelected = item.toUpperCase() === mark.trim().toUpperCase();
-                        return (
-                          <div
-                            key={item}
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              setMark(item);
-                              setIsMarkDropdownOpen(false);
-                            }}
-                            className={`px-3 py-2 text-xs font-bold uppercase font-mono rounded-xl cursor-pointer transition-all flex items-center justify-between ${
-                              isSelected 
-                                ? 'bg-indigo-50 text-indigo-800' 
-                                : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-                            }`}
-                          >
-                            <span>{item}</span>
-                            {isSelected && <Check className="h-3.5 w-3.5 text-indigo-600 shrink-0" />}
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="p-2.5 text-center text-xs text-slate-400 font-medium">
-                        No existing marks matching "{mark}"
-                      </div>
-                    )}
-
-                    {mark.trim() && !availableMarks.some(m => m.toUpperCase() === mark.trim().toUpperCase()) && (
-                      <div
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          setIsMarkDropdownOpen(false);
-                        }}
-                        className="mt-1 pt-1 border-t border-slate-100 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 rounded-xl cursor-pointer text-xs font-bold flex items-center gap-1.5 transition-colors uppercase font-mono"
-                      >
-                        <Plus className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
-                        <span className="truncate">Add new mark & save: "{mark.trim().toUpperCase()}"</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Weight Restriction Note */}
-              <div className="bg-amber-50/50 border border-amber-100 p-3 rounded-lg flex gap-2 text-[10px] text-amber-800 leading-normal">
-                <Lock className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                <span>
-                  **Weight Restriction**: Sub-user is responsible for updating weight specifications. Entering physical weights is disabled under the Owner role scope.
-                </span>
-              </div>
-            </div>
-
-            {/* Fixed / Prominent Action Footer - Always visible above mobile nav */}
-            <div className="p-3.5 sm:p-5 bg-white border-t border-slate-100 shrink-0 shadow-xs">
-              <button
-                type="submit"
-                className="w-full py-3 sm:py-3.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold rounded-xl active:scale-[0.98] transition-all text-sm shadow-md cursor-pointer flex items-center justify-center gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Compile & Review Transaction</span>
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    )}
-
-      {/* Mandatory Transaction Review Modal */}
-      {isReviewOpen && reviewData && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in">
-          <div className="w-full max-w-md md:max-w-lg bg-white rounded-2xl sm:rounded-3xl shadow-premium border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 sm:space-y-5 animate-slide-up max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto overscroll-contain">
-            
-            {/* Header */}
-            <div className="text-center pb-2 border-b border-slate-100">
-              <div className="h-10 w-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mx-auto mb-2">
-                <FileText className="h-5.5 w-5.5" />
-              </div>
-              <h3 className="text-base font-bold text-slate-800">Mandatory Ledger Review</h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">Please review code structures before compiling to ledger.</p>
-            </div>
-
-            {/* Generated Unique Transaction ID Banner */}
-            <div className="bg-slate-50 p-3 sm:p-3.5 rounded-xl border border-slate-200/50 text-center font-mono">
-              <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest">Auto-Generated Transaction ID</span>
-              <span className="text-xs sm:text-sm font-bold text-slate-800 select-all break-all block mt-1">{reviewData.transactionId}</span>
-            </div>
-
-            {/* Review breakdown data grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs">
-              <div className="sm:border-r border-slate-100 sm:pr-2">
-                <span className="text-slate-400 block font-semibold uppercase tracking-wider text-[10px]">Agent</span>
-                <span className="text-slate-800 font-bold mt-0.5 block break-words">{reviewData.agent}</span>
-              </div>
-              <div className="sm:pl-2">
-                <span className="text-slate-400 block font-semibold uppercase tracking-wider text-[10px]">Brand / Mark</span>
-                <span className="text-slate-800 font-bold uppercase mt-0.5 block">{reviewData.mark}</span>
-              </div>
-              <div className="sm:border-r border-slate-100 sm:pr-2 pt-1 border-t sm:border-t-0 border-slate-50">
-                <span className="text-slate-400 block font-semibold uppercase tracking-wider text-[10px]">Date & Lot</span>
-                <span className="text-slate-800 font-semibold font-mono mt-0.5 block">
-                  {reviewData.date} (LOT {reviewData.lot})
-                </span>
-              </div>
-              <div className="sm:pl-2 pt-1 border-t sm:border-t-0 border-slate-50">
-                <span className="text-slate-400 block font-semibold uppercase tracking-wider text-[10px]">Bags & Rate</span>
-                <span className="text-slate-800 font-semibold font-mono mt-0.5 block">
-                  {reviewData.bags} Bags @ {formatINR(reviewData.rate)}
-                </span>
-              </div>
-            </div>
-
-            {/* Submit responses alert */}
-            {submitResult && (
-              <div className={`p-3 rounded-xl flex items-center gap-2.5 text-xs font-semibold ${
-                submitResult.success 
-                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-100' 
-                  : 'bg-rose-50 text-rose-800 border border-rose-100'
-              }`}>
-                {submitResult.success ? (
-                  <CheckCircle className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
-                ) : (
-                  <AlertTriangle className="h-4.5 w-4.5 text-rose-600 shrink-0" />
-                )}
-                <span className="break-words">{submitResult.message}</span>
-              </div>
-            )}
-
-            {/* Buttons */}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setIsReviewOpen(false)}
-                disabled={isSubmitting}
-                className="flex-1 py-2.5 sm:py-3 border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl transition-all"
-              >
-                Back to Edit
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmSave}
-                disabled={isSubmitting}
-                className="flex-1 py-2.5 sm:py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl transition-all shadow-md shadow-emerald-600/10 flex items-center justify-center"
-              >
-                {isSubmitting ? (
-                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                ) : (
-                  'Confirm & Ledger'
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Lot Conflict Warning Modal */}
-      {isConflictOpen && conflictTransaction && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in">
-          <div className="w-full max-w-md md:max-w-lg bg-white rounded-2xl sm:rounded-3xl shadow-premium border border-slate-100 p-4 sm:p-6 lg:p-7 space-y-4 animate-slide-up max-h-[92dvh] sm:max-h-[90vh] overflow-y-auto overscroll-contain">
-            <div className="text-center pb-1 border-b border-slate-100">
-              <div className="h-10 w-10 sm:h-12 sm:w-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-2">
-                <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6" />
-              </div>
-              <h3 className="text-base font-bold text-slate-800">Duplicate Lot Alert</h3>
-              <p className="text-xs text-rose-600 mt-1 font-semibold">Lot Number {conflictTransaction.lot} already exists for today ({conflictTransaction.date}).</p>
-            </div>
-            
-            <div className="bg-slate-50 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200/50 space-y-2 text-xs">
-              <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Existing Lot Details</span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-1.5 sm:gap-y-2 text-slate-600 font-medium">
-                <div>Transaction ID:</div>
-                <div className="font-mono text-slate-800 font-bold break-all">{conflictTransaction.transactionId}</div>
-                <div>Agent Name:</div>
-                <div className="text-slate-800 font-bold break-words">{conflictTransaction.agent}</div>
-                <div>Bags Count:</div>
-                <div className="text-slate-800 font-bold font-mono">{conflictTransaction.bags} Bags</div>
-                <div>Original Rate:</div>
-                <div className="text-slate-800 font-bold font-mono">{formatINR(conflictTransaction.rate)}</div>
-                <div>Mark:</div>
-                <div className="text-slate-800 font-bold uppercase">{conflictTransaction.mark}</div>
-                <div>Weight Status:</div>
-                <div className="text-slate-800 font-bold font-mono">{conflictTransaction.weight || 'Pending'}</div>
-              </div>
-            </div>
-            
-            <button
-              type="button"
-              onClick={() => setIsConflictOpen(false)}
-              className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl transition-all"
-            >
-              Close & Change Lot Number
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Add New Transaction Modal */}
+      <AddTransactionModal
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        onAddTransaction={onAddTransaction}
+        transactions={transactions}
+        initialDate={selectedDayString}
+        availableMarks={availableMarks}
+        availableAgents={availableAgents}
+        availableColdStorages={availableColdStorages}
+        onSuccess={() => {
+          setIsFormOpen(false);
+          if (onRefresh) onRefresh();
+        }}
+      />
 
       {/* Read-Only weight optimization detailed view modal */}
       {viewingTx && (
@@ -1514,6 +1150,18 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               >
                 <FileText className="w-3.5 h-3.5" />
                 <span>Agents ({branchAgents.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalTab('coldstorages')}
+                className={`flex items-center gap-1.5 px-3 py-2 font-bold rounded-xl transition-all shrink-0 cursor-pointer ${
+                  masterTab === 'coldstorages'
+                    ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Snowflake className="w-3.5 h-3.5" />
+                <span>Cold Storages ({branchColdStorages.length})</span>
               </button>
               <button
                 type="button"
@@ -1822,6 +1470,94 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
                           onClick={() => handleRemoveBranchAgent(idx)}
                           className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
                           title={`Remove ${a}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB: COLD STORAGES */}
+            {masterTab === 'coldstorages' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <Snowflake className="w-3.5 h-3.5 text-sky-600" />
+                      <span>Cold Storage Facilities ({branchColdStorages.length})</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400">
+                      Cold storage units available for AC transactions in this branch
+                    </p>
+                  </div>
+                </div>
+
+                {/* Add Cold Storage Input Row */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Enter cold storage name (e.g. Balaji Cold Storage)"
+                    value={newBranchColdStorage}
+                    onChange={(e) => {
+                      setNewBranchColdStorage(e.target.value);
+                      if (branchColdStorageError) setBranchColdStorageError('');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddBranchColdStorage();
+                      }
+                    }}
+                    className={`flex-1 px-3 py-2 bg-white border rounded-xl focus:border-indigo-600 text-xs font-medium text-slate-800 transition-all shadow-2xs ${
+                      branchColdStorageError ? 'border-rose-400 ring-1 ring-rose-200' : 'border-slate-200'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddBranchColdStorage}
+                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 shadow-sm shadow-indigo-600/20 transition-all shrink-0 active:scale-95 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Cold Storage
+                  </button>
+                </div>
+
+                {branchColdStorageError && (
+                  <div className="flex items-center gap-1.5 p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold animate-fadeIn">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                    <span>{branchColdStorageError}</span>
+                  </div>
+                )}
+
+                {/* Added Cold Storages Display List */}
+                <div className="space-y-1.5 max-h-[280px] overflow-y-auto p-1 pr-1.5 bg-slate-50/50 rounded-xl border border-slate-100">
+                  {branchColdStorages.length === 0 ? (
+                    <div className="p-4 bg-white border border-slate-200 rounded-xl text-center text-xs text-slate-400 italic">
+                      No cold storages added yet. Enter a cold storage name above and click Add Cold Storage.
+                    </div>
+                  ) : (
+                    branchColdStorages.map((cs, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between px-3.5 py-2.5 bg-white border border-slate-200 hover:border-sky-300 rounded-xl shadow-2xs group transition-all"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="text-[10px] font-mono font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded shrink-0 flex items-center gap-1">
+                            <Snowflake className="w-3 h-3 text-sky-500" />
+                            #{idx + 1}
+                          </span>
+                          <span className="text-xs sm:text-sm font-bold text-slate-800 truncate">
+                            {cs}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBranchColdStorage(idx)}
+                          className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                          title={`Remove ${cs}`}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>

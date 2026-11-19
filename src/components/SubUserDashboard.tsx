@@ -17,7 +17,8 @@ import {
   Check,
   Eye,
   User,
-  Users
+  Users,
+  Snowflake
 } from 'lucide-react';
 import { type Transaction, isGoogleSheetsEnabled, getCurrentTenant } from '../services/sheetService';
 import { ViewWeightDetailsModal } from './ViewWeightDetailsModal';
@@ -850,6 +851,16 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
                       <span className="text-[10px] font-bold uppercase px-1.5 py-0.2 bg-emerald-50 text-emerald-800 rounded border border-emerald-100/50">
                         {tx.mark}
                       </span>
+                      {tx.storageType === 'AC' ? (
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 bg-cyan-50 text-cyan-800 rounded border border-cyan-200 flex items-center gap-1" title={tx.coldStorageName ? `Cold Storage: ${tx.coldStorageName}` : 'Cold Storage'}>
+                          <Snowflake className="h-2.5 w-2.5 text-cyan-600" />
+                          <span>AC{tx.coldStorageName ? ` • ${tx.coldStorageName}` : ''}</span>
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-medium px-1.5 py-0.2 bg-slate-50 text-slate-500 rounded border border-slate-200/60">
+                          NON AC
+                        </span>
+                      )}
                       {hasWeight && (
                         <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded border border-emerald-200 flex items-center gap-1">
                           <Check className="h-3 w-3" /> Done
@@ -980,6 +991,19 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
                       <div>Mark: <span className="text-slate-800 font-bold uppercase font-mono px-1.5 py-0.2 bg-emerald-50 text-emerald-800 rounded border border-emerald-200/60">{selectedTx.mark}</span></div>
                       <div>Owner Bags: <span className="text-slate-800 font-bold font-mono">{selectedTx.bags} Bags</span></div>
                       <div>Owner Rate: <span className="text-slate-800 font-bold font-mono">{formatINR(selectedTx.rate)}</span></div>
+                      <div className="col-span-2 flex items-center gap-1.5">
+                        <span>Storage:</span>
+                        {selectedTx.storageType === 'AC' ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded font-bold text-[10px] bg-cyan-50 text-cyan-800 border border-cyan-200">
+                            <Snowflake className="w-2.5 h-2.5 text-cyan-600" />
+                            AC {selectedTx.coldStorageName ? `(${selectedTx.coldStorageName})` : ''}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded font-semibold text-[10px] bg-slate-100 text-slate-600 border border-slate-200">
+                            NON AC
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -1195,6 +1219,23 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
                               </option>
                             ))}
                           </select>
+                        </div>
+                      </div>
+
+                      {/* Storage Condition (Read-only reference) */}
+                      <div className="grid grid-cols-3 p-2 sm:p-3 items-center text-[11px] sm:text-xs">
+                        <div className="font-semibold text-slate-500">Storage Type</div>
+                        <div className="col-span-2">
+                          {selectedTx.storageType === 'AC' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-bold text-[10px] bg-cyan-50 text-cyan-800 border border-cyan-200">
+                              <Snowflake className="w-2.5 h-2.5 text-cyan-600" />
+                              AC {selectedTx.coldStorageName ? `(${selectedTx.coldStorageName})` : ''}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-semibold text-[10px] bg-slate-100 text-slate-600 border border-slate-200">
+                              NON AC
+                            </span>
+                          )}
                         </div>
                       </div>
 
