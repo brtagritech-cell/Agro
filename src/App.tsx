@@ -249,6 +249,14 @@ function App() {
   const handleEditTransaction = async (originalTxId: string, updatedData: Partial<Transaction>) => {
     setIsLoading(true);
     const result = await editTransaction(originalTxId, updatedData);
+    if (result.success && result.data) {
+      const updatedItem = result.data;
+      setTransactions(prev => {
+        const filtered = prev.filter(t => (t.transactionId || '').trim().toLowerCase() !== originalTxId.trim().toLowerCase());
+        const next = [updatedItem, ...filtered];
+        return next.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      });
+    }
     await loadData();
     setIsLoading(false);
     setToast({

@@ -26,7 +26,8 @@ import {
   type TenantConfig,
   isWeightPending,
   deleteTransaction as defaultDeleteTx,
-  editTransaction as defaultEditTx
+  editTransaction as defaultEditTx,
+  normalizeDateParts
 } from '../services/sheetService';
 import { ViewWeightDetailsModal } from './ViewWeightDetailsModal';
 import { EditTransactionModal } from './EditTransactionModal';
@@ -434,8 +435,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     }
     if (res.success) {
       if (updatedData.date) {
-        setSelectedDayString(updatedData.date);
-        const parts = updatedData.date.split('-');
+        const norm = normalizeDateParts(updatedData.date).formatted || updatedData.date;
+        setSelectedDayString(norm);
+        const parts = norm.split('-');
         if (parts.length === 3) {
           const y = parseInt(parts[0], 10);
           const m = parseInt(parts[1], 10) - 1;
@@ -462,7 +464,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
   // Update transaction view for the selected calendar day
   useEffect(() => {
-    const daily = transactions.filter(t => t.date === selectedDayString);
+    const daily = transactions.filter(t => {
+      const norm = normalizeDateParts(t.date || '').formatted || t.date;
+      return norm === selectedDayString;
+    });
     setSelectedDayEntries(daily);
   }, [selectedDayString, transactions]);
 
@@ -646,7 +651,10 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
               const cellDateStr = `${y}-${m}-${d}`;
               
               // Find transactions on this cell date
-              const dayTxs = transactions.filter(t => t.date === cellDateStr);
+              const dayTxs = transactions.filter(t => {
+                const norm = normalizeDateParts(t.date || '').formatted || t.date;
+                return norm === cellDateStr;
+              });
               const dayBagsSum = dayTxs.reduce((sum, t) => sum + t.bags, 0);
               const hasTransactions = dayTxs.length > 0;
               const isSelected = selectedDayString === cellDateStr;

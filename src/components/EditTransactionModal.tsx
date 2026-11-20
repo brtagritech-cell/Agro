@@ -65,11 +65,12 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
 
   // Only the active Client Entry Link portal marks
   const combinedMarks = useMemo(() => {
+    const tenant = getCurrentTenant();
     const set = new Set<string>();
     // Strictly load marks configured for this specific Client Entry Link portal
     const portalMarks = (availableMarks && availableMarks.length > 0)
       ? availableMarks
-      : (currentTenant?.marks || []);
+      : (tenant?.marks || []);
 
     portalMarks.forEach(m => {
       if (m && m.trim()) set.add(m.trim().toUpperCase());
@@ -81,11 +82,12 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     }
 
     return Array.from(set).sort();
-  }, [availableMarks, transaction, currentTenant]);
+  }, [availableMarks, transaction?.mark, isOpen]);
 
   // Available cold storages
   const allColdStorages = useMemo(() => {
-    const fromTenant = currentTenant?.coldStorages || [];
+    const tenant = getCurrentTenant();
+    const fromTenant = tenant?.coldStorages || [];
     const fromProps = availableColdStorages || [];
     const set = new Set<string>();
     [...fromTenant, ...fromProps].forEach(cs => {
@@ -96,7 +98,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       set.add(transaction.coldStorageName.trim());
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [currentTenant, availableColdStorages, transaction]);
+  }, [availableColdStorages, transaction?.coldStorageName, isOpen]);
 
   const filteredColdStorages = useMemo(() => {
     if (!coldStorageName.trim()) return allColdStorages;
@@ -104,7 +106,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     return allColdStorages.filter(cs => cs.toLowerCase().includes(q));
   }, [allColdStorages, coldStorageName]);
 
-  // Initialize values when modal opens with a transaction
+  // Initialize values strictly once when modal opens or when target transaction changes
   useEffect(() => {
     if (transaction && isOpen) {
       const dateInfo = normalizeDateParts(transaction.date || '');
@@ -113,14 +115,14 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       setBags(String(transaction.bags || ''));
       setRate(String(transaction.rate || ''));
       setAgent(transaction.agent || '');
-      setMark(transaction.mark ? transaction.mark.toUpperCase() : (combinedMarks[0] || 'BRT'));
+      setMark(transaction.mark ? transaction.mark.toUpperCase() : 'BRT');
       setStorageType(transaction.storageType === 'AC' ? 'AC' : 'NON AC');
       setColdStorageName(transaction.coldStorageName || '');
       setIsAgentDropdownOpen(false);
       setIsColdStorageDropdownOpen(false);
       setError('');
     }
-  }, [transaction, isOpen, combinedMarks]);
+  }, [transaction?.transactionId, isOpen]);
 
   // Click outside listener for agent and cold storage dropdowns
   useEffect(() => {
