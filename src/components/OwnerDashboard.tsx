@@ -1,14 +1,12 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Calendar as CalendarIcon, 
   Plus, 
-  Lock, 
   AlertTriangle,
   X, 
   FileText, 
   CheckCircle, 
   HelpCircle, 
-  Clock, 
   Database,
   Zap,
   Users,
@@ -16,17 +14,12 @@ import {
   Trash2,
   AlertCircle,
   Save,
-  ChevronDown,
-  Check,
   Scale,
   Pencil,
-  Snowflake,
-  Warehouse,
-  Wind
+  Snowflake
 } from 'lucide-react';
 import { 
   type Transaction, 
-  getShortAgentName, 
   isGoogleSheetsEnabled, 
   getCurrentTenant, 
   updateBranchConfiguration,
@@ -99,26 +92,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
   // Form Bottom Sheet State
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [lot, setLot] = useState('');
-  const [bags, setBags] = useState('');
-  const [rate, setRate] = useState('');
-  const [agent, setAgent] = useState('');
-  const [mark, setMark] = useState<string>((currentTenant?.marks || [])[0] || 'BRT');
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
-
-  // Searchable combobox dropdown states for Add Transaction Form
-  const [isAgentDropdownOpen, setIsAgentDropdownOpen] = useState(false);
-  const [isMarkDropdownOpen, setIsMarkDropdownOpen] = useState(false);
-  const agentDropdownRef = useRef<HTMLDivElement>(null);
-  const markDropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (tenant?.marks && tenant.marks.length > 0) {
-      if (!mark || !tenant.marks.includes(mark)) {
-        setMark(tenant.marks[0]);
-      }
-    }
-  }, [tenant.subUrl, tenant.marks]);
 
   useEffect(() => {
     const handleSubRouteChange = () => {
@@ -165,13 +139,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [tenant, currentTenant, branchAgents, transactions]);
 
-  // Filtered agents matching typed input
-  const filteredAgents = useMemo(() => {
-    if (!agent.trim()) return availableAgents;
-    const q = agent.trim().toLowerCase();
-    return availableAgents.filter(a => a.toLowerCase().includes(q));
-  }, [availableAgents, agent]);
-
   // Available brand marks: strictly from this Client Entry Link portal configuration
   const availableMarks = useMemo(() => {
     const fromTenant = tenant?.marks || currentTenant?.marks || branchMarks || [];
@@ -181,13 +148,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     const fromTxs = transactions.map(t => (t.mark || '').trim().toUpperCase()).filter(Boolean);
     return Array.from(new Set(fromTxs)).sort();
   }, [tenant, currentTenant, branchMarks, transactions]);
-
-  // Filtered marks matching typed input
-  const filteredMarks = useMemo(() => {
-    if (!mark.trim()) return availableMarks;
-    const q = mark.trim().toLowerCase();
-    return availableMarks.filter(m => m.toLowerCase().includes(q));
-  }, [availableMarks, mark]);
 
   // Available cold storages: strictly from this branch configuration + already entered transactions
   const availableColdStorages = useMemo(() => {
@@ -200,20 +160,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [tenant, currentTenant, branchColdStorages, transactions]);
-
-  // Close dropdowns on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (agentDropdownRef.current && !agentDropdownRef.current.contains(e.target as Node)) {
-        setIsAgentDropdownOpen(false);
-      }
-      if (markDropdownRef.current && !markDropdownRef.current.contains(e.target as Node)) {
-        setIsMarkDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   // Pricing state
   const [masterBagCost, setMasterBagCost] = useState<string>(String(tenant.bagCost ?? 25));
@@ -450,9 +396,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
 
       const updatedTenant = getCurrentTenant();
       setTenant(updatedTenant);
-      if (finalMarks.length > 0 && !finalMarks.includes(mark)) {
-        setMark(finalMarks[0]);
-      }
       
       setSaveSuccessMsg(result.message || 'Branch settings and master data synced to database successfully!');
       setTimeout(() => {
@@ -493,71 +436,16 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     return res;
   };
   
-  // Lot conflict states
-  const [conflictTransaction, setConflictTransaction] = useState<Transaction | null>(null);
-  const [isConflictOpen, setIsConflictOpen] = useState(false);
-  
-  // Strict live system timestamp state
-  const [liveTimestamp, setLiveTimestamp] = useState<Date>(new Date());
-
-  const checkLotConflict = (lotVal: string) => {
-    const trimmedLot = lotVal.trim();
-    if (!trimmedLot) return;
-    
-    // Find conflict for current system date
-    const yyyy = new Date().getFullYear();
-    const mm = String(new Date().getMonth() + 1).padStart(2, '0');
-    const dd = String(new Date().getDate()).padStart(2, '0');
-    const todayStr = `${yyyy}-${mm}-${dd}`;
-    
-    const conflict = transactions.find(t => t.date === todayStr && t.lot.toLowerCase() === trimmedLot.toLowerCase());
-    if (conflict) {
-      setConflictTransaction(conflict);
-      setIsConflictOpen(true);
-    } else {
-      setConflictTransaction(null);
-    }
-  };
-
-  // Review Modal State
-  const [isReviewOpen, setIsReviewOpen] = useState(false);
-  const [reviewData, setReviewData] = useState<{
-    timestamp: string;
-    transactionId: string;
-    date: string;
-    lot: string;
-    bags: number;
-    rate: number;
-    agent: string;
-    mark: string;
-  } | null>(null);
-  
-  const [formError, setFormError] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitResult, setSubmitResult] = useState<{ success: boolean; message: string } | null>(null);
-
-  // Update live clock every second while form is open
-  useEffect(() => {
-    let timer: any;
-    if (isFormOpen) {
-      setLiveTimestamp(new Date());
-      timer = setInterval(() => {
-        setLiveTimestamp(new Date());
-      }, 1000);
-    }
-    return () => clearInterval(timer);
-  }, [isFormOpen]);
-
   // Lock background scroll when any modal sheet is open on mobile
   useEffect(() => {
-    if (isFormOpen || isReviewOpen || isMasterDataOpen) {
+    if (isFormOpen || isMasterDataOpen) {
       const prevOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
       return () => {
         document.body.style.overflow = prevOverflow;
       };
     }
-  }, [isFormOpen, isReviewOpen, isMasterDataOpen]);
+  }, [isFormOpen, isMasterDataOpen]);
 
   // Update transaction view for the selected calendar day
   useEffect(() => {
@@ -596,153 +484,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
     setSelectedDayString(dateStr);
   };
 
-  // Compile inputs and trigger Review step
-  const handleFormSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError('');
-
-    const parsedBags = parseInt(bags, 10);
-    const parsedRate = parseFloat(rate);
-
-    if (isNaN(parsedBags) || parsedBags <= 0) {
-      setFormError('Number of bags must be an integer greater than 0.');
-      return;
-    }
-    if (isNaN(parsedRate) || parsedRate <= 0) {
-      setFormError('Rate must be a decimal value greater than 0.');
-      return;
-    }
-    if (!agent.trim()) {
-      setFormError('Commission agent name is required.');
-      return;
-    }
-
-    // Capture LOCKED timestamp at this exact submission moment
-    const currentSystemTime = new Date();
-    const isoString = currentSystemTime.toISOString();
-    
-    // Format YYYY-MM-DD
-    const yyyy = currentSystemTime.getFullYear();
-    const mm = String(currentSystemTime.getMonth() + 1).padStart(2, '0');
-    const dd = String(currentSystemTime.getDate()).padStart(2, '0');
-    const formattedDate = `${yyyy}-${mm}-${dd}`;
-    
-    // Format YYYYMMDD for transaction ID prefix
-    const datePrefix = `${yyyy}${mm}${dd}`;
-
-    const lotVal = lot.trim();
-    if (!lotVal || !/^[a-zA-Z0-9]+$/.test(lotVal)) {
-      setFormError('Lot Number must be alphanumeric (letters and numbers only, e.g. 12A, 22B).');
-      return;
-    }
-
-    // Double check conflict on submit
-    const conflict = transactions.find(t => t.date === formattedDate && t.lot.toLowerCase() === lotVal.toLowerCase());
-    if (conflict) {
-      setConflictTransaction(conflict);
-      setIsConflictOpen(true);
-      setFormError(`Lot Number ${lotVal} already exists on this date.`);
-      return;
-    }
-
-    const paddedLot = /^\d+$/.test(lotVal) ? lotVal.padStart(2, '0') : lotVal;
-
-    // Get short agent code
-    const shortAgent = getShortAgentName(agent);
-
-    // Compile unique Transaction ID
-    // Format: [Date]-[Lot]-[Bags]-[ShortAgentName]-[Mark]
-    // Example: 20260620-01-450-RAM-BRT
-    const transactionId = `${datePrefix}-${paddedLot}-${parsedBags}-${shortAgent}-${mark}`;
-
-    setReviewData({
-      timestamp: isoString,
-      transactionId,
-      date: formattedDate,
-      lot: lotVal,
-      bags: parsedBags,
-      rate: parsedRate,
-      agent: agent.trim(),
-      mark
-    });
-
-    setIsReviewOpen(true);
-  };
-
-  // Save the reviewed record to sheet/localDB
-  const handleConfirmSave = async () => {
-    if (!reviewData) return;
-    setIsSubmitting(true);
-    setSubmitResult(null);
-
-    const payload = {
-      timestamp: reviewData.timestamp,
-      transactionId: reviewData.transactionId,
-      date: reviewData.date,
-      lot: reviewData.lot,
-      bags: reviewData.bags,
-      rate: reviewData.rate,
-      agent: reviewData.agent,
-      mark: reviewData.mark,
-      weight: "" // Omitted from owner view, sub-user fills this later
-    };
-
-    const response = await onAddTransaction(payload);
-    setIsSubmitting(false);
-    
-    if (response.success) {
-      // 1. Check if Commission Agent is new, and if so, save it to the database!
-      const trimmedAgent = reviewData.agent.trim();
-      const currentAgents = tenant?.agents || branchAgents || [];
-      const isAgentKnown = currentAgents.some(a => a.trim().toLowerCase() === trimmedAgent.toLowerCase());
-      if (!isAgentKnown && trimmedAgent) {
-        const updatedAgents = [...currentAgents, trimmedAgent];
-        setBranchAgents(updatedAgents);
-        try {
-          await updateBranchConfiguration(tenant.subUrl, { agents: updatedAgents });
-          console.log(`New Commission Agent "${trimmedAgent}" saved to database successfully.`);
-        } catch (err) {
-          console.warn('Failed to auto-save new agent to database:', err);
-        }
-      }
-
-      // 2. Check if Brand / Mark is new, and if so, save it to the database!
-      const trimmedMark = reviewData.mark.trim().toUpperCase();
-      const currentMarks = tenant?.marks || branchMarks || [];
-      const isMarkKnown = currentMarks.some(m => m.trim().toUpperCase() === trimmedMark);
-      if (!isMarkKnown && trimmedMark) {
-        const updatedMarks = [...currentMarks, trimmedMark];
-        setBranchMarks(updatedMarks);
-        try {
-          await updateBranchConfiguration(tenant.subUrl, { marks: updatedMarks });
-          console.log(`New Brand Mark "${trimmedMark}" saved to database successfully.`);
-        } catch (err) {
-          console.warn('Failed to auto-save new mark to database:', err);
-        }
-      }
-
-      setSubmitResult({ success: true, message: response.message });
-      // Reset form states
-      setLot('');
-      setBags('');
-      setRate('');
-      setAgent('');
-      setMark(tenant?.marks?.[0] || 'BRT');
-      setIsAgentDropdownOpen(false);
-      setIsMarkDropdownOpen(false);
-      
-      // Navigate to Ledger tab
-      setTimeout(() => {
-        setIsReviewOpen(false);
-        setIsFormOpen(false);
-        setSubmitResult(null);
-        onTabChange('ledger');
-      }, 1000);
-    } else {
-      setSubmitResult({ success: false, message: response.message || 'Error occurred.' });
-    }
-  };
-
   // Indian Rupee helper
   const formatINR = (val: number | undefined | null) => {
     const num = (val === undefined || val === null || isNaN(val)) ? 0 : val;
@@ -750,19 +491,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
       style: 'currency',
       currency: 'INR'
     }).format(num);
-  };
-
-  // Format system time for input display
-  const formatLiveClock = (dateObj: Date) => {
-    const year = dateObj.getFullYear();
-    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const day = String(dateObj.getDate()).padStart(2, '0');
-    
-    const hours = String(dateObj.getHours()).padStart(2, '0');
-    const minutes = String(dateObj.getMinutes()).padStart(2, '0');
-    const seconds = String(dateObj.getSeconds()).padStart(2, '0');
-    
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
   };
 
   return (
@@ -815,10 +543,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
             <span>Branch Settings</span>
           </button>
           <button
-            onClick={() => {
-              setFormError('');
-              setIsFormOpen(true);
-            }}
+            onClick={() => setIsFormOpen(true)}
             className="flex items-center justify-center gap-2 px-4 py-2.5 sm:px-5 sm:py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold shadow-lg shadow-emerald-600/25 active:scale-[0.98] transition-all text-xs sm:text-sm"
           >
             <Plus className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
