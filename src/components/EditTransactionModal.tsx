@@ -17,7 +17,12 @@ import {
   Plus
 } from 'lucide-react';
 import type { Transaction } from '../services/sheetService';
-import { getShortAgentName, getCurrentTenant, updateBranchConfiguration } from '../services/sheetService';
+import { 
+  getShortAgentName, 
+  getCurrentTenant, 
+  updateBranchConfiguration,
+  normalizeDateParts 
+} from '../services/sheetService';
 
 interface EditTransactionModalProps {
   isOpen: boolean;
@@ -102,12 +107,13 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   // Initialize values when modal opens with a transaction
   useEffect(() => {
     if (transaction && isOpen) {
-      setDate(transaction.date || '');
+      const dateInfo = normalizeDateParts(transaction.date || '');
+      setDate(dateInfo.formatted || transaction.date || '');
       setLot(String(transaction.lot || ''));
       setBags(String(transaction.bags || ''));
       setRate(String(transaction.rate || ''));
       setAgent(transaction.agent || '');
-      setMark(transaction.mark ? transaction.mark.toUpperCase() : (combinedMarks[0] || 'AD'));
+      setMark(transaction.mark ? transaction.mark.toUpperCase() : (combinedMarks[0] || 'BRT'));
       setStorageType(transaction.storageType === 'AC' ? 'AC' : 'NON AC');
       setColdStorageName(transaction.coldStorageName || '');
       setIsAgentDropdownOpen(false);
@@ -151,13 +157,15 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   // Calculate live preview of updated Transaction ID
   const calculatePreviewId = () => {
     try {
-      const [yyyy, mm, dd] = date.split('-');
-      const datePrefix = `${yyyy || ''}${mm || ''}${dd || ''}`;
+      const dateInfo = normalizeDateParts(date);
+      const datePrefix = (dateInfo.yyyy && dateInfo.mm && dateInfo.dd)
+        ? `${dateInfo.yyyy}${dateInfo.mm}${dateInfo.dd}`
+        : date.replace(/[^0-9]/g, '').slice(0, 8);
       const lotVal = lot.trim();
       const paddedLot = /^\d+$/.test(lotVal) ? lotVal.padStart(2, '0') : (lotVal || '00');
       const parsedBags = parseInt(bags, 10) || 0;
       const shortAgent = agent.trim() ? getShortAgentName(agent) : 'AGT';
-      const markVal = (mark.trim() || 'AD').toUpperCase();
+      const markVal = (mark.trim() || combinedMarks[0] || 'BRT').toUpperCase();
       return `${datePrefix}-${paddedLot}-${parsedBags}-${shortAgent}-${markVal}`;
     } catch {
       return transaction.transactionId;
@@ -203,11 +211,14 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       return;
     }
 
+    const dateInfo = normalizeDateParts(date);
+    const validDate = dateInfo.formatted || date;
+
     setIsSaving(true);
     try {
       const trimmedColdStorage = storageType === 'AC' ? coldStorageName.trim() : '';
       const result = await onSave(transaction.transactionId, {
-        date,
+        date: validDate,
         lot: lot.trim(),
         bags: parsedBags,
         rate: parsedRate,

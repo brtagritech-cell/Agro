@@ -426,13 +426,26 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({
   };
 
   const handleEditSave = async (originalTxId: string, updatedData: Partial<Transaction>) => {
+    let res;
     if (onEditTransaction) {
-      const res = await onEditTransaction(originalTxId, updatedData);
-      if (res.success && onRefresh) onRefresh();
-      return res;
+      res = await onEditTransaction(originalTxId, updatedData);
+    } else {
+      res = await defaultEditTx(originalTxId, updatedData);
     }
-    const res = await defaultEditTx(originalTxId, updatedData);
-    if (res.success && onRefresh) onRefresh();
+    if (res.success) {
+      if (updatedData.date) {
+        setSelectedDayString(updatedData.date);
+        const parts = updatedData.date.split('-');
+        if (parts.length === 3) {
+          const y = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10) - 1;
+          if (!isNaN(y) && !isNaN(m)) {
+            setCurrentDate(new Date(y, m, 1));
+          }
+        }
+      }
+      if (onRefresh) onRefresh();
+    }
     return res;
   };
   

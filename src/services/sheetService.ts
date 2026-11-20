@@ -525,6 +525,51 @@ export function getShortAgentName(name: string): string {
   return clean.substring(0, 3);
 }
 
+export function normalizeDateParts(dateStr: string): { yyyy: string; mm: string; dd: string; formatted: string } {
+  if (!dateStr) return { yyyy: '', mm: '', dd: '', formatted: '' };
+  const clean = dateStr.trim();
+  // Standard ISO YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+    const [yyyy, mm, dd] = clean.split('-');
+    return { yyyy, mm, dd, formatted: clean };
+  }
+  // Localized DD-MM-YYYY
+  if (/^\d{2}-\d{2}-\d{4}$/.test(clean)) {
+    const [dd, mm, yyyy] = clean.split('-');
+    return { yyyy, mm, dd, formatted: `${yyyy}-${mm}-${dd}` };
+  }
+  // Localized DD/MM/YYYY
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(clean)) {
+    const [dd, mm, yyyy] = clean.split('/');
+    return { yyyy, mm, dd, formatted: `${yyyy}-${mm}-${dd}` };
+  }
+  // Standard ISO with slashes YYYY/MM/DD
+  if (/^\d{4}\/\d{2}\/\d{2}$/.test(clean)) {
+    const [yyyy, mm, dd] = clean.split('/');
+    return { yyyy, mm, dd, formatted: `${yyyy}-${mm}-${dd}` };
+  }
+  const parts = clean.split(/[-/]/);
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      return {
+        yyyy: parts[0],
+        mm: parts[1].padStart(2, '0'),
+        dd: parts[2].padStart(2, '0'),
+        formatted: `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`
+      };
+    }
+    if (parts[2].length === 4) {
+      return {
+        yyyy: parts[2],
+        mm: parts[1].padStart(2, '0'),
+        dd: parts[0].padStart(2, '0'),
+        formatted: `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`
+      };
+    }
+  }
+  return { yyyy: '', mm: '', dd: '', formatted: clean };
+}
+
 export async function fetchTransactions(): Promise<Transaction[]> {
   const currentTenant = getCurrentTenant();
 
@@ -988,8 +1033,9 @@ export async function editTransaction(
   originalTransactionId: string,
   updatedData: Partial<Transaction>
 ): Promise<{ success: boolean; message: string; data?: Transaction }> {
+  const currentTenant = getCurrentTenant();
   const txs = getMockTransactions();
-  const existingIndex = txs.findIndex(t => t.transactionId === originalTransactionId);
+  const existingIndex = txs.findIndex(t => (t.transactionId || '').trim() === originalTransactionId.trim());
   const existing = existingIndex >= 0 ? txs[existingIndex] : null;
 
   if (existing && !isWeightPending(existing)) {
@@ -999,23 +1045,26 @@ export async function editTransaction(
     };
   }
 
-  // Calculate new transaction ID if date, lot, bags, agent, or mark changed
-  const date = updatedData.date || existing?.date || '';
+  // Normalize date string to standard YYYY-MM-DD
+  const rawDate = updatedData.date || existing?.date || '';
+  const dateInfo = normalizeDateParts(rawDate);
+  const date = dateInfo.formatted || rawDate;
   const lotVal = String(updatedData.lot !== undefined ? updatedData.lot : (existing?.lot || '')).trim();
   const bagsVal = updatedData.bags !== undefined ? Number(updatedData.bags) : (existing?.bags || 0);
   const rateVal = updatedData.rate !== undefined ? Number(updatedData.rate) : (existing?.rate || 0);
   const agentVal = (updatedData.agent !== undefined ? updatedData.agent : (existing?.agent || '')).trim();
   const markVal = (updatedData.mark !== undefined ? updatedData.mark : (existing?.mark || '')).trim();
 
-  const [yyyy, mm, dd] = date.split('-');
-  const datePrefix = `${yyyy || ''}${mm || ''}${dd || ''}`;
+  const datePrefix = (dateInfo.yyyy && dateInfo.mm && dateInfo.dd)
+    ? `${dateInfo.yyyy}${dateInfo.mm}${dateInfo.dd}`
+    : date.replace(/[^0-9]/g, '').slice(0, 8);
   const paddedLot = /^\d+$/.test(lotVal) ? lotVal.padStart(2, '0') : lotVal;
   const shortAgent = getShortAgentName(agentVal);
   const newTransactionId = `${datePrefix}-${paddedLot}-${bagsVal}-${shortAgent}-${markVal}`;
 
   // Check for conflict if transaction ID changed
-  if (newTransactionId !== originalTransactionId) {
-    const conflict = txs.find(t => t.transactionId === newTransactionId && t.transactionId !== originalTransactionId);
+  if (newTransactionId !== originalTransactionId.trim()) {
+    const conflict = txs.find(t => t.transactionId === newTransactionId && t.transactionId !== originalTransactionId.trim());
     if (conflict) {
       return {
         success: false,
@@ -1041,7 +1090,9 @@ export async function editTransaction(
     mark: markVal,
     storageType: updatedStorageType,
     coldStorageName: updatedColdStorageName,
-    totalValue: isWeightPending(existing) ? 0 : (bagsVal * (existing?.subUserRate || rateVal))
+    subUrl: existing?.subUrl || currentTenant.subUrl,
+    timestamp: existing?.timestamp || new Date().toISOString(),
+    totalValue: (existing && !isWeightPending(existing)) ? (bagsVal * (existing.subUserRate || rateVal)) : 0
   };
 
   // 1. Update in local storage
@@ -1072,36 +1123,56 @@ export async function editTransaction(
       }
 
       const runUpdate = async (row: any) => {
-        if (newTransactionId !== originalTransactionId) {
-          const { data: oldRow } = await supabase
-            .from('transactions')
-            .select('*')
-            .eq('transaction_id', originalTransactionId)
-            .single();
+        // Attempt direct UPDATE first (preserves row identity, auto-generated id, timestamp, sub_url)
+        const { error: updateErr, data: updatedRows } = await supabase
+          .from('transactions')
+          .update(row)
+          .eq('transaction_id', originalTransactionId.trim())
+          .select();
 
-          const fullNewRow = {
-            ...(oldRow || {}),
-            ...row,
-            transaction_id: newTransactionId
-          };
+        if (updateErr) {
+          // If direct update failed and transaction_id changed, fallback to insert-and-delete
+          // (strip any existing 'id' column to avoid primary key collisions)
+          if (newTransactionId !== originalTransactionId.trim()) {
+            const { data: oldRow } = await supabase
+              .from('transactions')
+              .select('*')
+              .eq('transaction_id', originalTransactionId.trim())
+              .maybeSingle();
 
-          const { error: insertErr } = await supabase
-            .from('transactions')
-            .upsert(fullNewRow, { onConflict: 'transaction_id' });
+            if (oldRow) {
+              const { id, ...oldRowClean } = oldRow;
+              const fullNewRow = {
+                ...oldRowClean,
+                ...row,
+                transaction_id: newTransactionId
+              };
 
-          if (insertErr) throw insertErr;
+              const { error: insertErr } = await supabase
+                .from('transactions')
+                .upsert(fullNewRow, { onConflict: 'transaction_id' });
 
-          await supabase
-            .from('transactions')
-            .delete()
-            .eq('transaction_id', originalTransactionId);
-        } else {
-          const { error: updateErr } = await supabase
+              if (insertErr) throw insertErr;
+
+              await supabase
+                .from('transactions')
+                .delete()
+                .eq('transaction_id', originalTransactionId.trim());
+
+              return;
+            }
+          }
+          throw updateErr;
+        }
+
+        // If direct update matched 0 rows, try case-insensitive/trimmed match
+        if (updatedRows && updatedRows.length === 0) {
+          const { error: retryErr } = await supabase
             .from('transactions')
             .update(row)
-            .eq('transaction_id', originalTransactionId);
+            .ilike('transaction_id', originalTransactionId.trim());
 
-          if (updateErr) throw updateErr;
+          if (retryErr) throw retryErr;
         }
       };
 
@@ -1127,8 +1198,8 @@ export async function editTransaction(
     } catch (err: any) {
       console.error('Failed to update transaction in Supabase:', err);
       return {
-        success: true,
-        message: `Updated locally, but Supabase sync error: ${err?.message || 'Sync failed'}`,
+        success: false,
+        message: `Failed to update database: ${err?.message || 'Sync error'}`,
         data: updatedTx
       };
     }
