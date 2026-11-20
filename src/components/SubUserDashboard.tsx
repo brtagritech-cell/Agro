@@ -19,7 +19,8 @@ import {
   User,
   Users,
   Snowflake,
-  Camera
+  Camera,
+  Image as ImageIcon
 } from 'lucide-react';
 import { type Transaction, isGoogleSheetsEnabled, getCurrentTenant } from '../services/sheetService';
 import { ViewWeightDetailsModal } from './ViewWeightDetailsModal';
@@ -83,8 +84,9 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
   const [confirmedMark, setConfirmedMark] = useState<string>((currentTenant?.marks || [])[0] || 'BRT');
   const [rateReason, setRateReason] = useState('');
 
-  // Mobile / Tablet Camera states
+  // Mobile / Tablet Camera & Gallery Scanner states
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [cameraInitialMode, setCameraInitialMode] = useState<'camera' | 'gallery'>('camera');
   const [cameraBagIdx, setCameraBagIdx] = useState<number | undefined>(undefined);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -195,7 +197,8 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
     onRefresh(); // Refresh queue on release
   };
 
-  const openCameraForBag = (idx?: number) => {
+  const openScanner = (mode: 'camera' | 'gallery' = 'camera', idx?: number) => {
+    setCameraInitialMode(mode);
     setCameraBagIdx(idx);
     setIsCameraOpen(true);
   };
@@ -203,12 +206,13 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
   const handleCameraCapture = (data: { weight: string; image: string; allWeights?: string[] }) => {
     setCapturedImage(data.image);
 
-    // If multiple bag weights detected from a sheet/slip and general scan triggered
-    if (data.allWeights && data.allWeights.length > 1 && (cameraBagIdx === undefined || cameraBagIdx === 0)) {
+    // If multiple bag weights detected from weighing slip/receipt
+    if (data.allWeights && data.allWeights.length > 1) {
       setBagWeights(data.allWeights);
+      const gross = data.allWeights.reduce((sum, w) => sum + (parseFloat(w) || 0), 0);
       setFeedback({
         success: true,
-        message: `Extracted ${data.allWeights.length} bag weights from image! Scale photo attached.`
+        message: `Extracted all ${data.allWeights.length} bag weights from weighing slip! Total Gross: ${gross.toFixed(3)} kg. Slip photo attached.`
       });
       return;
     }
@@ -1218,22 +1222,35 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
                   )}
 
                   {/* Bag Weights List Section Header */}
-                  <div className="flex justify-between items-center shrink-0 pt-0.5">
-                    <div className="flex items-center gap-2">
-                      <span className="block text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <div className="flex flex-wrap justify-between items-center gap-1.5 shrink-0 pt-0.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="block text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
                         <span>Bag Weights List (kg)</span>
                       </span>
-                      {/* Mobile & Tab View Only: Camera Quick Scan Button */}
-                      <button
-                        type="button"
-                        onClick={() => openCameraForBag(undefined)}
-                        className="lg:hidden inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 border border-emerald-200/90 rounded-lg text-[10px] font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
-                        title="Open mobile camera to scan scale weights"
-                      >
-                        <Camera className="h-3 w-3 text-emerald-600" />
-                        <span>Scan Scale</span>
-                      </button>
+
+                      {/* Mobile & Tab View Only: Camera & Gallery Scan Options */}
+                      <div className="lg:hidden flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openScanner('camera')}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 border border-emerald-200/90 rounded-lg text-[10px] font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
+                          title="Open camera to scan weighing slip or scale"
+                        >
+                          <Camera className="h-3 w-3 text-emerald-600" />
+                          <span>Camera</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openScanner('gallery')}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200 text-indigo-800 border border-indigo-200 rounded-lg text-[10px] font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
+                          title="Select weighing slip photo from gallery"
+                        >
+                          <ImageIcon className="h-3 w-3 text-indigo-600" />
+                          <span>Gallery</span>
+                        </button>
+                      </div>
                     </div>
+
                     <span className="text-[11px] font-bold font-mono bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-full border border-emerald-200">
                       {bagWeights.length} Bags ({bagWeights.filter(w => parseFloat(w) > 0).length} Entered)
                     </span>
@@ -1273,7 +1290,7 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
                         {/* Mobile & Tab View Only: Camera Icon Button */}
                         <button
                           type="button"
-                          onClick={() => openCameraForBag(idx)}
+                          onClick={() => openScanner('camera', idx)}
                           className="lg:hidden p-2 text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 border border-emerald-200/80 rounded-xl transition-all shrink-0 cursor-pointer shadow-2xs active:scale-95"
                           title={`Open camera to snap scale for Bag #${idx + 1}`}
                         >
@@ -1597,6 +1614,7 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
         onCapture={handleCameraCapture}
         targetBagIndex={cameraBagIdx}
         lotNumber={selectedTx?.lot}
+        initialMode={cameraInitialMode}
       />
 
       {/* Scale Proof Photo Lightbox Modal */}

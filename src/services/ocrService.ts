@@ -1,25 +1,27 @@
 /**
- * OCR & Image Processing Service for Weighing Scales
- * Extracts weights from digital scale screens, slips, or meters.
- * Works offline with built-in canvas analysis & 7-segment recognition,
- * and leverages native TextDetector or dynamic Tesseract when available.
+ * OCR & Image Processing Service for Weighing Scales & APMC Mandi Slips
+ * Extracts weights from digital scale screens or printed weighing receipts (slips).
+ * Supports single bag digital scales as well as 30+ bag multi-column thermal print receipts.
  */
 
 export interface OcrExtractionResult {
-  primaryWeight: string; // Formatted weight, e.g. "48.200"
+  primaryWeight: string; // Formatted weight, e.g. "30.500"
   candidates: string[];  // All candidate weights detected
-  allWeights: string[];  // Multiple weights detected (if scanning multi-bag slip/sheet)
+  allWeights: string[];  // Multiple weights detected (if scanning multi-bag slip/receipt)
+  totalBagsDetected?: number; // Total bags if printed on receipt (e.g. 30)
+  reportedGrossWeight?: number; // Reported gross wt on receipt (e.g. 1141.900)
   rawText: string;       // Raw detected text
+  isReceiptSlip: boolean; // True if multi-bag receipt structure was recognized
 }
 
 /**
- * Resizes and compresses an image to an optimized JPEG data URL (~50KB-100KB)
- * for fast database storage and low bandwidth.
+ * Resizes and compresses an image to an optimized JPEG data URL (~50KB-120KB)
+ * for fast database storage and low bandwidth while preserving digit readability.
  */
 export async function compressImage(
   source: string | Blob | File,
-  maxDimension = 1024,
-  quality = 0.75
+  maxDimension = 1400,
+  quality = 0.82
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -68,7 +70,7 @@ export async function compressImage(
 }
 
 /**
- * Normalizes common OCR misreadings of digits, especially for 7-segment or LED displays.
+ * Normalizes common OCR misreadings of digits, especially for thermal print receipts and 7-segment displays.
  */
 function cleanOcrText(raw: string): string {
   let text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -80,87 +82,157 @@ function cleanOcrText(raw: string): string {
   text = text.replace(/([0-9])\s*([bB])\b/g, '$18');
   text = text.replace(/([0-9])\s*([lI|])\s*([0-9])/g, '$11$3');
 
-  // Commas between digits are often decimal points on scales: "48,20" -> "48.20"
+  // Commas between digits are often decimal points on thermal receipts: "30,500" -> "30.500"
   text = text.replace(/(\d+),(\d+)/g, '$1.$2');
 
   return text;
 }
 
 /**
- * Parses numbers from text and identifies probable bag weights.
- * Agricultural spice bag weights typically range between 5.0 kg and 70.0 kg.
+ * Parses numbers and identifies bag weights from text.
+ * Handles single scale screens as well as printed multi-column weighing receipts.
  */
-export function extractWeightsFromText(text: string): { primary: string; candidates: string[]; all: string[] } {
+export function extractWeightsFromText(text: string): {
+  primary: string;
+  candidates: string[];
+  all: string[];
+  totalBagsDetected?: number;
+  reportedGrossWeight?: number;
+  isReceiptSlip: boolean;
+} {
   const cleaned = cleanOcrText(text);
 
-  // Match decimal patterns like 50.200, 48.2, 52.00, or integers like 48, 52
-  // Also matches trailing kg / KG
-  const regex = /(?:^|[^\d.])(\d{1,3}(?:\.\d{1,3})?)\s*(?:kg|kgs|kilo|kilograms)?(?=[^\d.]|$)/gi;
-  const matches: { value: number; str: string; hasDecimal: boolean; score: number }[] = [];
-
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(cleaned)) !== null) {
-    const rawValStr = match[1];
-    const num = parseFloat(rawValStr);
-    
-    // Ignore invalid, zero, or typical non-weight numbers (like lot numbers >= 100 or dates)
-    if (isNaN(num) || num <= 0 || num > 95) continue;
-    
-    // Skip if looks like a year, lot ID, or rate (e.g. > 100)
-    const hasDecimal = rawValStr.includes('.');
-    
-    // Score based on likelihood of being a bag weight:
-    // Typical spice bag weight is between 25 kg and 62 kg
-    let score = 0;
-    if (num >= 20 && num <= 62) score += 50;
-    else if (num >= 10 && num <= 75) score += 30;
-    else score += 10;
-
-    if (hasDecimal) score += 30;
-    
-    // Reward weights ending in .0, .1, .2 ... .9 (standard weighing scale graduations)
-    if (hasDecimal && /^\d+\.[0-9]0*$/.test(rawValStr)) {
-      score += 20;
-    }
-
-    matches.push({ value: num, str: rawValStr, hasDecimal, score });
+  // Check if receipt has printed metadata
+  let totalBagsDetected: number | undefined;
+  const bagsMatch = cleaned.match(/(?:TOTAL|ACTUAL)\s*(?:NO\s*OF\s*)?BAGS\s*[:\-\=]?\s*(\d+)/i);
+  if (bagsMatch) {
+    totalBagsDetected = parseInt(bagsMatch[1], 10);
   }
 
-  // Also check line-by-line if there are numbers written in rows
+  let reportedGrossWeight: number | undefined;
+  const grossMatch = cleaned.match(/Gross\s*wt\s*[:\-\=]?\s*(\d+(?:\.\d+)?)/i);
+  if (grossMatch) {
+    reportedGrossWeight = parseFloat(grossMatch[1]);
+  }
+
+  // --- STRATEGY 1: Serial Numbered Bags from Weighbridge Slips ---
+  // Matches patterns like "01) 30.500", "02) 33.000", "1) 30.500", "01. 30.500", "01: 30.500", "01] 30.500"
+  const serialRegex = /(?:^|\s)(?:S\.?\s*No)?\s*0*([1-9]\d{0,2})\s*[\)\.\:\-\]]\s*(\d{2,3}(?:\.\d{1,3})?)/gi;
+  const bagMap = new Map<number, string>();
+  let sm: RegExpExecArray | null;
+
+  while ((sm = serialRegex.exec(cleaned)) !== null) {
+    const sNo = parseInt(sm[1], 10);
+    const weightVal = parseFloat(sm[2]);
+    // Agricultural spice bag weights typically range between 12.0 kg and 75.0 kg
+    if (sNo >= 1 && sNo <= 300 && weightVal >= 12 && weightVal <= 75) {
+      const rounded = Math.round(weightVal * 10) / 10;
+      bagMap.set(sNo, rounded.toFixed(3));
+    }
+  }
+
+  if (bagMap.size >= 2) {
+    const maxSNo = Math.max(...bagMap.keys());
+    const bagsCount = totalBagsDetected && totalBagsDetected >= maxSNo ? totalBagsDetected : maxSNo;
+    const slipBags: string[] = [];
+
+    for (let i = 1; i <= bagsCount; i++) {
+      if (bagMap.has(i)) {
+        slipBags.push(bagMap.get(i)!);
+      } else {
+        // Fallback placeholder if a middle number was missed
+        slipBags.push('00.000');
+      }
+    }
+
+    return {
+      primary: slipBags[0] || '',
+      candidates: Array.from(bagMap.values()),
+      all: slipBags,
+      totalBagsDetected,
+      reportedGrossWeight,
+      isReceiptSlip: true
+    };
+  }
+
+  // --- STRATEGY 2: Sequential Decimal Weights in Bag Range ---
+  // If serial numbers weren't explicitly captured, find all valid decimal weights
   const lines = cleaned.split('\n');
-  const lineWeights: string[] = [];
+  const sequentialWeights: string[] = [];
+  const candidateScores: { value: number; str: string; score: number }[] = [];
+
   for (const line of lines) {
-    const trimmed = line.trim();
-    const lineMatch = trimmed.match(/(\d{1,3}(?:\.\d{1,3})?)/);
-    if (lineMatch) {
-      const val = parseFloat(lineMatch[1]);
-      if (!isNaN(val) && val >= 5 && val <= 75) {
+    // Skip lines with keywords like Gross, Lot, Rate, Deductions, etc.
+    if (/(?:lot|rate|gross|net|deduction|hamali|weighmen|sweeper|total\s*wt)/i.test(line)) {
+      continue;
+    }
+
+    const lineRegex = /(?:^|[^\d.])(\d{2,3}(?:\.\d{1,3})?)\s*(?:kg)?(?=[^\d.]|$)/gi;
+    let lm: RegExpExecArray | null;
+    while ((lm = lineRegex.exec(line)) !== null) {
+      const val = parseFloat(lm[1]);
+      // Filter out non-bag weights (e.g. rate 10000, lot numbers, or < 12kg)
+      if (!isNaN(val) && val >= 15 && val <= 70) {
         const rounded = Math.round(val * 10) / 10;
-        lineWeights.push(rounded.toFixed(3));
+        const formatted = rounded.toFixed(3);
+        sequentialWeights.push(formatted);
+
+        let score = 50;
+        if (val >= 25 && val <= 62) score += 30;
+        if (lm[1].includes('.')) score += 20;
+        candidateScores.push({ value: val, str: formatted, score });
       }
     }
   }
 
-  // Sort matches by score descending
-  matches.sort((a, b) => b.score - a.score);
+  if (sequentialWeights.length >= 2) {
+    return {
+      primary: sequentialWeights[0],
+      candidates: Array.from(new Set(sequentialWeights)),
+      all: sequentialWeights,
+      totalBagsDetected: totalBagsDetected || sequentialWeights.length,
+      reportedGrossWeight,
+      isReceiptSlip: true
+    };
+  }
 
+  // --- STRATEGY 3: Single Scale Display Extraction ---
+  // Match single bag weights (like 52.400 kg from a digital scale LED screen)
+  const singleRegex = /(?:^|[^\d.])(\d{1,3}(?:\.\d{1,3})?)\s*(?:kg|kgs|kilo)?(?=[^\d.]|$)/gi;
+  const singleMatches: { value: number; str: string; score: number }[] = [];
+  let m: RegExpExecArray | null;
+
+  while ((m = singleRegex.exec(cleaned)) !== null) {
+    const rawValStr = m[1];
+    const num = parseFloat(rawValStr);
+    if (isNaN(num) || num <= 0 || num > 95) continue;
+
+    let score = 10;
+    if (num >= 20 && num <= 62) score += 50;
+    else if (num >= 10 && num <= 75) score += 30;
+
+    if (rawValStr.includes('.')) score += 30;
+    if (/^\d+\.[0-9]0*$/.test(rawValStr)) score += 20;
+
+    singleMatches.push({ value: num, str: rawValStr, score });
+  }
+
+  singleMatches.sort((a, b) => b.score - a.score);
   const uniqueCandidates: string[] = [];
-  for (const m of matches) {
-    const val = m.value;
-    const rounded = Math.round(val * 10) / 10;
-    const formatted = rounded.toFixed(3);
-    if (!uniqueCandidates.includes(formatted)) {
-      uniqueCandidates.push(formatted);
+  for (const sm of singleMatches) {
+    const rounded = (Math.round(sm.value * 10) / 10).toFixed(3);
+    if (!uniqueCandidates.includes(rounded)) {
+      uniqueCandidates.push(rounded);
     }
   }
 
-  const primary = uniqueCandidates.length > 0 ? uniqueCandidates[0] : '';
-  const all = lineWeights.length > 1 ? lineWeights : uniqueCandidates;
-
   return {
-    primary,
+    primary: uniqueCandidates[0] || '',
     candidates: uniqueCandidates,
-    all
+    all: sequentialWeights.length > 0 ? sequentialWeights : uniqueCandidates,
+    totalBagsDetected,
+    reportedGrossWeight,
+    isReceiptSlip: false
   };
 }
 
@@ -215,19 +287,19 @@ function loadTesseractCDN(): Promise<any> {
     };
     document.head.appendChild(script);
 
-    // Timeout after 6 seconds so we never block the UI
+    // Timeout after 8 seconds so we never block the UI
     setTimeout(() => {
       if (!(window as any).Tesseract) {
         reject(new Error('Tesseract CDN load timeout'));
       }
-    }, 6000);
+    }, 8000);
   });
 
   return tesseractPromise;
 }
 
 /**
- * Runs OCR on an image (dataUrl or canvas) to extract bag weights.
+ * Runs OCR on an image (dataUrl or canvas) to extract bag weights from scale or receipt.
  */
 export async function extractWeightsFromImage(imageDataUrl: string): Promise<OcrExtractionResult> {
   let detectedText = '';
@@ -257,8 +329,8 @@ export async function extractWeightsFromImage(imageDataUrl: string): Promise<Ocr
           detectedText += '\n' + nativeText;
         }
 
-        // 2. Try online Tesseract.js if available
-        if (!detectedText.trim()) {
+        // 2. Try online Tesseract.js if available or if native text was minimal
+        if (!detectedText.trim() || detectedText.length < 20) {
           try {
             const Tesseract = await loadTesseractCDN();
             if (Tesseract && Tesseract.recognize) {
@@ -282,16 +354,19 @@ export async function extractWeightsFromImage(imageDataUrl: string): Promise<Ocr
         primaryWeight: parsed.primary,
         candidates: parsed.candidates,
         allWeights: parsed.all,
-        rawText: detectedText.trim()
+        totalBagsDetected: parsed.totalBagsDetected,
+        reportedGrossWeight: parsed.reportedGrossWeight,
+        rawText: detectedText.trim(),
+        isReceiptSlip: parsed.isReceiptSlip
       });
     } catch (err) {
       console.warn('Error during weight extraction from image:', err);
-      // Fallback with empty result rather than throwing
       resolve({
         primaryWeight: '',
         candidates: [],
         allWeights: [],
-        rawText: ''
+        rawText: '',
+        isReceiptSlip: false
       });
     }
   });
