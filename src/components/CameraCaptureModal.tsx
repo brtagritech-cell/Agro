@@ -45,6 +45,8 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
   const [ocrResult, setOcrResult] = useState<OcrExtractionResult | null>(null);
   const [selectedWeight, setSelectedWeight] = useState<string>('');
   const [multiBags, setMultiBags] = useState<string[]>([]);
+  const [ocrStatus, setOcrStatus] = useState<string>('Analyzing image...');
+  const [ocrProgress, setOcrProgress] = useState<number>(0);
   const [hasTorch, setHasTorch] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<'environment' | 'user'>('environment');
@@ -191,14 +193,19 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
     setOcrResult(null);
     setSelectedWeight('');
     setMultiBags([]);
+    setOcrStatus('Preparing high-resolution image...');
+    setOcrProgress(10);
 
     try {
-      // 1. Compress image to clean JPEG (~80KB-120KB) preserving high-resolution print clarity
-      const compressed = await compressImage(dataUrl, 1400, 0.82);
+      // 1. Compress image to clean JPEG (~90KB-140KB) preserving high-resolution print clarity
+      const compressed = await compressImage(dataUrl, 1600, 0.85);
       setCapturedImage(compressed);
 
       // 2. Extract weights using OCR (handles both thermal slip receipts and digital scale screens)
-      const result = await extractWeightsFromImage(compressed);
+      const result = await extractWeightsFromImage(compressed, (status, percent) => {
+        setOcrStatus(status);
+        setOcrProgress(percent);
+      });
       setOcrResult(result);
 
       if (result.allWeights && result.allWeights.length > 1) {
@@ -439,17 +446,23 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
                 className="w-full h-full object-contain max-h-[340px]" 
               />
 
-              {/* OCR Processing Overlay */}
+              {/* OCR Processing Overlay with Live Progress */}
               {isProcessing && (
-                <div className="absolute inset-0 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-center p-4 z-20 animate-fade-in">
+                <div className="absolute inset-0 bg-black/85 backdrop-blur-xs flex flex-col items-center justify-center p-6 z-20 animate-fade-in text-center">
                   <Loader2 className="h-10 w-10 text-emerald-400 animate-spin mb-3" />
                   <p className="text-sm font-bold text-white flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-emerald-400 animate-pulse" />
-                    Analyzing Weighing Slip...
+                    <span>Analyzing Weighing Slip...</span>
                   </p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Extracting bag serial numbers (S.No) & weights (kg)
+                  <p className="text-xs text-slate-300 mt-1.5 font-medium">
+                    {ocrStatus}
                   </p>
+                  <div className="w-56 bg-slate-800 rounded-full h-2 mt-3.5 overflow-hidden border border-slate-700">
+                    <div 
+                      className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+                      style={{ width: `${ocrProgress || 35}%` }}
+                    />
+                  </div>
                 </div>
               )}
             </>
@@ -499,30 +512,65 @@ export const CameraCaptureModal: React.FC<CameraCaptureModalProps> = ({
             /* --- MULTI-BAG RECEIPT SLIP REVIEW TABLE --- */
             <div className="space-y-2.5 animate-fade-in max-h-[50vh] flex flex-col">
               {/* Slip Summary Header Badge */}
-              <div className="bg-emerald-950/60 border border-emerald-700/80 p-2.5 rounded-2xl flex items-center justify-between text-xs shrink-0">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg">
-                    <FileText className="h-4 w-4" />
+              <div className="bg-emerald-950/70 border border-emerald-700/80 p-2.5 rounded-2xl flex flex-col gap-2 shrink-0">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg">
+                      <FileText className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-emerald-300 text-xs block">
+                        Weighing Slip: {multiBags.length} Bags Extracted (Serials 1 to {multiBags.length})
+                      </span>
+                      <span className="text-[10px] text-emerald-400/90 font-mono">
+                        Total Gross: <strong>{multiGross.toFixed(3)} kg</strong>
+                        {ocrResult?.reportedGrossWeight ? ` • Slip Gross: ${ocrResult.reportedGrossWeight.toFixed(3)} kg` : ''}
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="font-bold text-emerald-300 text-xs block">
-                      Weighing Slip: {multiBags.length} Bags Extracted!
-                    </span>
-                    <span className="text-[10px] text-emerald-400/80 font-mono">
-                      Total Gross: <strong>{multiGross.toFixed(3)} kg</strong>
-                      {ocrResult?.reportedGrossWeight ? ` (Slip: ${ocrResult.reportedGrossWeight.toFixed(3)} kg)` : ''}
-                    </span>
-                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddMultiBag}
+                    className="px-2 py-1 bg-emerald-800/80 hover:bg-emerald-700 text-emerald-200 border border-emerald-600 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all shrink-0"
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span>Add Bag</span>
+                  </button>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleAddMultiBag}
-                  className="px-2 py-1 bg-emerald-800/80 hover:bg-emerald-700 text-emerald-200 border border-emerald-600 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all"
-                >
-                  <Plus className="h-3 w-3" />
-                  <span>Add Bag</span>
-                </button>
+                {/* Gross Matching Status Badge */}
+                {ocrResult?.reportedGrossWeight && (
+                  <div className="flex items-center justify-between text-[11px] pt-1 border-t border-emerald-800/60">
+                    {Math.abs(multiGross - ocrResult.reportedGrossWeight) < 0.05 ? (
+                      <span className="text-emerald-300 font-bold flex items-center gap-1">
+                        <Check className="h-3.5 w-3.5 text-emerald-400" />
+                        <span>Total Gross & Slip Gross Match ({multiGross.toFixed(3)} kg)</span>
+                      </span>
+                    ) : (
+                      <div className="flex items-center justify-between w-full gap-2">
+                        <span className="text-amber-300 font-semibold flex items-center gap-1 text-[10px]">
+                          <AlertCircle className="h-3 w-3 text-amber-400 shrink-0" />
+                          <span>Diff: {(multiGross - ocrResult.reportedGrossWeight).toFixed(3)} kg</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const diff = ocrResult.reportedGrossWeight! - multiGross;
+                            if (multiBags.length > 0) {
+                              const lastIdx = multiBags.length - 1;
+                              const updatedLast = Math.max(0, (parseFloat(multiBags[lastIdx]) || 0) + diff);
+                              handleMultiBagChange(lastIdx, updatedLast.toFixed(3));
+                            }
+                          }}
+                          className="px-2 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 rounded text-[10px] font-bold cursor-pointer shrink-0"
+                        >
+                          Match to Slip Gross ({ocrResult.reportedGrossWeight.toFixed(3)} kg)
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Scrollable Extracted Bags Grid */}

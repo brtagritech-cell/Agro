@@ -7,21 +7,22 @@
 export interface OcrExtractionResult {
   primaryWeight: string; // Formatted weight, e.g. "30.500"
   candidates: string[];  // All candidate weights detected
-  allWeights: string[];  // Multiple weights detected (if scanning multi-bag slip/receipt)
+  allWeights: string[];  // Multiple weights detected in serial order (1, 2, 3... N)
   totalBagsDetected?: number; // Total bags if printed on receipt (e.g. 30)
   reportedGrossWeight?: number; // Reported gross wt on receipt (e.g. 1141.900)
+  calculatedGrossWeight?: number; // Sum of all extracted bag weights
   rawText: string;       // Raw detected text
   isReceiptSlip: boolean; // True if multi-bag receipt structure was recognized
 }
 
 /**
- * Resizes and compresses an image to an optimized JPEG data URL (~50KB-120KB)
- * for fast database storage and low bandwidth while preserving digit readability.
+ * Resizes and compresses an image to an optimized JPEG data URL (~80KB-140KB)
+ * for fast database storage and low bandwidth while preserving high-contrast digit readability.
  */
 export async function compressImage(
   source: string | Blob | File,
-  maxDimension = 1400,
-  quality = 0.82
+  maxDimension = 1600,
+  quality = 0.85
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -90,7 +91,7 @@ function cleanOcrText(raw: string): string {
 
 /**
  * Parses numbers and identifies bag weights from text.
- * Handles single scale screens as well as printed multi-column weighing receipts.
+ * Specifically scans for serials 1, 2, 3, 4 ... N and reconciles total gross with slip gross.
  */
 export function extractWeightsFromText(text: string): {
   primary: string;
@@ -98,39 +99,68 @@ export function extractWeightsFromText(text: string): {
   all: string[];
   totalBagsDetected?: number;
   reportedGrossWeight?: number;
+  calculatedGrossWeight?: number;
   isReceiptSlip: boolean;
 } {
   const cleaned = cleanOcrText(text);
 
-  // Check if receipt has printed metadata
+  // 1. Detect Total Bags if printed on receipt
   let totalBagsDetected: number | undefined;
   const bagsMatch = cleaned.match(/(?:TOTAL|ACTUAL)\s*(?:NO\s*OF\s*)?BAGS\s*[:\-\=]?\s*(\d+)/i);
   if (bagsMatch) {
     totalBagsDetected = parseInt(bagsMatch[1], 10);
   }
 
+  // 2. Detect Reported Gross Weight on receipt (e.g. "Gross wt: 1141.900" or "Gross wt: 1141 900")
   let reportedGrossWeight: number | undefined;
-  const grossMatch = cleaned.match(/Gross\s*wt\s*[:\-\=]?\s*(\d+(?:\.\d+)?)/i);
+  const grossMatch = cleaned.match(/Gross\s*w[ti]\s*[:\-\=]?\s*(\d{2,5})(?:[\.\,\s]\s*(\d{1,3}))?/i);
   if (grossMatch) {
-    reportedGrossWeight = parseFloat(grossMatch[1]);
+    const intPart = grossMatch[1];
+    const decPart = grossMatch[2] ? grossMatch[2].padEnd(3, '0').slice(0, 3) : '000';
+    reportedGrossWeight = parseFloat(`${intPart}.${decPart}`);
   }
 
-  // --- STRATEGY 1: Serial Numbered Bags from Weighbridge Slips ---
-  // Matches patterns like "01) 30.500", "02) 33.000", "1) 30.500", "01. 30.500", "01: 30.500", "01] 30.500"
-  const serialRegex = /(?:^|\s)(?:S\.?\s*No)?\s*0*([1-9]\d{0,2})\s*[\)\.\:\-\]]\s*(\d{2,3}(?:\.\d{1,3})?)/gi;
+  // Also check Net Wt as fallback reference
+  const netMatch = cleaned.match(/(?:Net|1)\s*w[ti]\s*[:\-\=]?\s*(\d{2,5})(?:[\.\,\s]\s*(\d{1,3}))?/i);
+  if (netMatch && !reportedGrossWeight) {
+    const intPart = netMatch[1];
+    const decPart = netMatch[2] ? netMatch[2].padEnd(3, '0').slice(0, 3) : '000';
+    const parsedNet = parseFloat(`${intPart}.${decPart}`);
+    const tareEst = (totalBagsDetected || 30) * 1.1;
+    reportedGrossWeight = Math.round((parsedNet + tareEst) * 10) / 10;
+  }
+
+  // 3. Match serial numbers 1, 2, 3 ... N
+  // Matches "01) 30. 500", "02) 33 000", "07)37. 900", "30)41 600", "01. 30.500", "1) 30.500"
+  // Handles spaces between dot and decimals, or spaces instead of dots
+  const serialRegex = /(?:^|\s)(?:S\.?\s*No\s*)?0*([1-9]\d{0,2})\s*[\)\.\:\-\]\}\>\|\/]\s*(\d{2,3})(?:[\.\,\s]\s*(\d{1,3}))?/gi;
   const bagMap = new Map<number, string>();
   let sm: RegExpExecArray | null;
 
   while ((sm = serialRegex.exec(cleaned)) !== null) {
     const sNo = parseInt(sm[1], 10);
-    const weightVal = parseFloat(sm[2]);
-    // Agricultural spice bag weights typically range between 12.0 kg and 75.0 kg
-    if (sNo >= 1 && sNo <= 300 && weightVal >= 12 && weightVal <= 75) {
-      const rounded = Math.round(weightVal * 10) / 10;
-      bagMap.set(sNo, rounded.toFixed(3));
+    let intPart = sm[2];
+    let decPart = sm[3] || '000';
+
+    let intVal = parseInt(intPart, 10);
+    // Correct OCR noise where 38 was read as 368
+    if (intVal > 70 && intPart.length === 3) {
+      intPart = intPart[0] + intPart[2];
+      intVal = parseInt(intPart, 10);
+    }
+
+    // Typical agricultural bag weights range between 15 kg and 70 kg
+    if (sNo >= 1 && sNo <= 300 && intVal >= 15 && intVal <= 70) {
+      if (decPart.length === 1) decPart = decPart + '00';
+      else if (decPart.length === 2) decPart = decPart + '0';
+      else if (decPart.length > 3) decPart = decPart.slice(0, 3);
+
+      const rounded = `${intVal}.${decPart}`;
+      bagMap.set(sNo, rounded);
     }
   }
 
+  // If serial numbers 1..N were found
   if (bagMap.size >= 2) {
     const maxSNo = Math.max(...bagMap.keys());
     const bagsCount = totalBagsDetected && totalBagsDetected >= maxSNo ? totalBagsDetected : maxSNo;
@@ -140,8 +170,23 @@ export function extractWeightsFromText(text: string): {
       if (bagMap.has(i)) {
         slipBags.push(bagMap.get(i)!);
       } else {
-        // Fallback placeholder if a middle number was missed
+        // If a middle bag was missed, estimate from neighboring weights or 00.000
         slipBags.push('00.000');
+      }
+    }
+
+    let calculatedGross = slipBags.reduce((sum, w) => sum + (parseFloat(w) || 0), 0);
+    calculatedGross = Math.round(calculatedGross * 1000) / 1000;
+
+    // Reconciliation Check:
+    // If exactly 1 bag was missed (00.000) and reportedGrossWeight is known, auto-calculate the missing bag
+    const zeroIndex = slipBags.indexOf('00.000');
+    if (zeroIndex !== -1 && reportedGrossWeight && reportedGrossWeight > 0) {
+      const otherBagsSum = slipBags.reduce((sum, w, idx) => idx === zeroIndex ? sum : sum + (parseFloat(w) || 0), 0);
+      const diff = reportedGrossWeight - otherBagsSum;
+      if (diff >= 15 && diff <= 65) {
+        slipBags[zeroIndex] = (Math.round(diff * 10) / 10).toFixed(3);
+        calculatedGross = reportedGrossWeight;
       }
     }
 
@@ -149,225 +194,87 @@ export function extractWeightsFromText(text: string): {
       primary: slipBags[0] || '',
       candidates: Array.from(bagMap.values()),
       all: slipBags,
-      totalBagsDetected,
+      totalBagsDetected: bagsCount,
       reportedGrossWeight,
+      calculatedGrossWeight: calculatedGross,
       isReceiptSlip: true
     };
   }
 
-  // --- STRATEGY 2: Sequential Decimal Weights in Bag Range ---
-  // If serial numbers weren't explicitly captured, find all valid decimal weights
+  // Fallback: Sequential weights
   const lines = cleaned.split('\n');
   const sequentialWeights: string[] = [];
-  const candidateScores: { value: number; str: string; score: number }[] = [];
-
   for (const line of lines) {
-    // Skip lines with keywords like Gross, Lot, Rate, Deductions, etc.
     if (/(?:lot|rate|gross|net|deduction|hamali|weighmen|sweeper|total\s*wt)/i.test(line)) {
       continue;
     }
-
-    const lineRegex = /(?:^|[^\d.])(\d{2,3}(?:\.\d{1,3})?)\s*(?:kg)?(?=[^\d.]|$)/gi;
+    const lineRegex = /(?:^|[^\d.])(\d{2,3}(?:[\.\s]\d{1,3})?)\s*(?:kg)?(?=[^\d.]|$)/gi;
     let lm: RegExpExecArray | null;
     while ((lm = lineRegex.exec(line)) !== null) {
-      const val = parseFloat(lm[1]);
-      // Filter out non-bag weights (e.g. rate 10000, lot numbers, or < 12kg)
+      const rawVal = lm[1].replace(/\s+/g, '.');
+      const val = parseFloat(rawVal);
       if (!isNaN(val) && val >= 15 && val <= 70) {
-        const rounded = Math.round(val * 10) / 10;
-        const formatted = rounded.toFixed(3);
-        sequentialWeights.push(formatted);
-
-        let score = 50;
-        if (val >= 25 && val <= 62) score += 30;
-        if (lm[1].includes('.')) score += 20;
-        candidateScores.push({ value: val, str: formatted, score });
+        const rounded = (Math.round(val * 10) / 10).toFixed(3);
+        sequentialWeights.push(rounded);
       }
     }
   }
 
-  if (sequentialWeights.length >= 2) {
-    return {
-      primary: sequentialWeights[0],
-      candidates: Array.from(new Set(sequentialWeights)),
-      all: sequentialWeights,
-      totalBagsDetected: totalBagsDetected || sequentialWeights.length,
-      reportedGrossWeight,
-      isReceiptSlip: true
-    };
-  }
-
-  // --- STRATEGY 3: Single Scale Display Extraction ---
-  // Match single bag weights (like 52.400 kg from a digital scale LED screen)
-  const singleRegex = /(?:^|[^\d.])(\d{1,3}(?:\.\d{1,3})?)\s*(?:kg|kgs|kilo)?(?=[^\d.]|$)/gi;
-  const singleMatches: { value: number; str: string; score: number }[] = [];
-  let m: RegExpExecArray | null;
-
-  while ((m = singleRegex.exec(cleaned)) !== null) {
-    const rawValStr = m[1];
-    const num = parseFloat(rawValStr);
-    if (isNaN(num) || num <= 0 || num > 95) continue;
-
-    let score = 10;
-    if (num >= 20 && num <= 62) score += 50;
-    else if (num >= 10 && num <= 75) score += 30;
-
-    if (rawValStr.includes('.')) score += 30;
-    if (/^\d+\.[0-9]0*$/.test(rawValStr)) score += 20;
-
-    singleMatches.push({ value: num, str: rawValStr, score });
-  }
-
-  singleMatches.sort((a, b) => b.score - a.score);
-  const uniqueCandidates: string[] = [];
-  for (const sm of singleMatches) {
-    const rounded = (Math.round(sm.value * 10) / 10).toFixed(3);
-    if (!uniqueCandidates.includes(rounded)) {
-      uniqueCandidates.push(rounded);
-    }
-  }
+  const calcGross = sequentialWeights.reduce((sum, w) => sum + (parseFloat(w) || 0), 0);
 
   return {
-    primary: uniqueCandidates[0] || '',
-    candidates: uniqueCandidates,
-    all: sequentialWeights.length > 0 ? sequentialWeights : uniqueCandidates,
-    totalBagsDetected,
+    primary: sequentialWeights[0] || '',
+    candidates: Array.from(new Set(sequentialWeights)),
+    all: sequentialWeights,
+    totalBagsDetected: totalBagsDetected || sequentialWeights.length,
     reportedGrossWeight,
-    isReceiptSlip: false
+    calculatedGrossWeight: Math.round(calcGross * 1000) / 1000,
+    isReceiptSlip: sequentialWeights.length >= 2
   };
 }
 
 /**
- * Attempts text detection using browser native TextDetector API if available.
- */
-async function detectWithNativeTextDetector(canvas: HTMLCanvasElement): Promise<string> {
-  try {
-    if (typeof window !== 'undefined' && 'TextDetector' in window) {
-      const detector = new (window as any).TextDetector();
-      const detected = await detector.detect(canvas);
-      if (detected && detected.length > 0) {
-        return detected.map((d: any) => d.rawValue || '').join('\n');
-      }
-    }
-  } catch (err) {
-    console.warn('Native TextDetector failed or not supported:', err);
-  }
-  return '';
-}
-
-/**
- * Dynamically loads Tesseract.js from CDN if online and available.
- */
-let tesseractPromise: Promise<any> | null = null;
-function loadTesseractCDN(): Promise<any> {
-  if (typeof window === 'undefined') return Promise.reject(new Error('Window not available'));
-  if ((window as any).Tesseract) return Promise.resolve((window as any).Tesseract);
-
-  if (tesseractPromise) return tesseractPromise;
-
-  tesseractPromise = new Promise((resolve, reject) => {
-    // If offline, don't stall
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      reject(new Error('Device is offline, skipping external OCR download'));
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-    script.async = true;
-    script.onload = () => {
-      if ((window as any).Tesseract) {
-        resolve((window as any).Tesseract);
-      } else {
-        reject(new Error('Tesseract script loaded but global object not found'));
-      }
-    };
-    script.onerror = (e) => {
-      tesseractPromise = null;
-      reject(e);
-    };
-    document.head.appendChild(script);
-
-    // Timeout after 8 seconds so we never block the UI
-    setTimeout(() => {
-      if (!(window as any).Tesseract) {
-        reject(new Error('Tesseract CDN load timeout'));
-      }
-    }, 8000);
-  });
-
-  return tesseractPromise;
-}
-
-/**
  * Runs OCR on an image (dataUrl or canvas) to extract bag weights from scale or receipt.
+ * Leverages bundled Tesseract.js with real-time progress callbacks.
  */
-export async function extractWeightsFromImage(imageDataUrl: string): Promise<OcrExtractionResult> {
+export async function extractWeightsFromImage(
+  imageDataUrl: string,
+  onProgress?: (status: string, percent: number) => void
+): Promise<OcrExtractionResult> {
   let detectedText = '';
 
-  return new Promise(async (resolve) => {
-    try {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
+  try {
+    if (onProgress) onProgress('Initializing OCR engine...', 15);
 
-      await new Promise<void>((res, rej) => {
-        img.onload = () => res();
-        img.onerror = (e) => rej(e);
-        img.src = imageDataUrl;
-      });
+    // Dynamically import tesseract.js from bundled package
+    const { createWorker } = await import('tesseract.js');
+    
+    if (onProgress) onProgress('Loading recognition model...', 30);
+    const worker = await createWorker('eng');
 
-      // Prepare canvas with image
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(img, 0, 0);
+    if (onProgress) onProgress('Scanning receipt for serial weights...', 60);
 
-        // 1. Try Native TextDetector first (instantaneous on Chrome/Android)
-        const nativeText = await detectWithNativeTextDetector(canvas);
-        if (nativeText && nativeText.trim()) {
-          detectedText += '\n' + nativeText;
-        }
+    const res = await worker.recognize(imageDataUrl);
+    detectedText = res?.data?.text || '';
 
-        // 2. Try online Tesseract.js if available or if native text was minimal
-        if (!detectedText.trim() || detectedText.length < 20) {
-          try {
-            const Tesseract = await loadTesseractCDN();
-            if (Tesseract && Tesseract.recognize) {
-              const res = await Tesseract.recognize(canvas, 'eng', {
-                logger: () => {}
-              });
-              if (res && res.data && res.data.text) {
-                detectedText += '\n' + res.data.text;
-              }
-            }
-          } catch (tessErr) {
-            console.log('Tesseract CDN note:', tessErr);
-          }
-        }
-      }
+    if (onProgress) onProgress('Finalizing bag analysis...', 90);
+    await worker.terminate();
+  } catch (err) {
+    console.warn('Tesseract OCR note:', err);
+  }
 
-      // 3. Extract weights from detected text
-      const parsed = extractWeightsFromText(detectedText);
+  if (onProgress) onProgress('Completed!', 100);
 
-      resolve({
-        primaryWeight: parsed.primary,
-        candidates: parsed.candidates,
-        allWeights: parsed.all,
-        totalBagsDetected: parsed.totalBagsDetected,
-        reportedGrossWeight: parsed.reportedGrossWeight,
-        rawText: detectedText.trim(),
-        isReceiptSlip: parsed.isReceiptSlip
-      });
-    } catch (err) {
-      console.warn('Error during weight extraction from image:', err);
-      resolve({
-        primaryWeight: '',
-        candidates: [],
-        allWeights: [],
-        rawText: '',
-        isReceiptSlip: false
-      });
-    }
-  });
+  const parsed = extractWeightsFromText(detectedText);
+
+  return {
+    primaryWeight: parsed.primary,
+    candidates: parsed.candidates,
+    allWeights: parsed.all,
+    totalBagsDetected: parsed.totalBagsDetected,
+    reportedGrossWeight: parsed.reportedGrossWeight,
+    calculatedGrossWeight: parsed.calculatedGrossWeight,
+    rawText: detectedText.trim(),
+    isReceiptSlip: parsed.isReceiptSlip
+  };
 }
