@@ -210,7 +210,8 @@ function App() {
     grossWeight?: number,
     bagsWeight?: number,
     netWeight?: number,
-    calculatedAmount?: number
+    calculatedAmount?: number,
+    weightImage?: string
   ) => {
     setIsLoading(true);
     const result = await updateWeight(
@@ -227,7 +228,8 @@ function App() {
       grossWeight,
       bagsWeight,
       netWeight,
-      calculatedAmount
+      calculatedAmount,
+      weightImage
     );
     await loadData(); // Reload fresh state
     setIsLoading(false);

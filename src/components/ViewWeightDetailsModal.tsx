@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, Scale, Info, Printer, User, Snowflake } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Scale, Info, Printer, User, Snowflake, Camera, Eye } from 'lucide-react';
 import type { Transaction } from '../services/sheetService';
 import { getCurrentTenant } from '../services/sheetService';
 
@@ -22,6 +22,7 @@ export const ViewWeightDetailsModal: React.FC<ViewWeightDetailsModalProps> = ({
   const currentTenant = getCurrentTenant();
   const bagCost = currentTenant?.bagCost ?? 25;
   const taram = currentTenant?.taram ?? 1.100;
+  const [isImagePreviewOpen, setIsImagePreviewOpen] = useState(false);
 
   const handlePrint = () => {
     window.print();
@@ -318,6 +319,40 @@ export const ViewWeightDetailsModal: React.FC<ViewWeightDetailsModalProps> = ({
               </div>
             )}
 
+            {/* Weighing Scale Proof Photo */}
+            {transaction.weightImage && (
+              <div className="bg-emerald-50/70 border border-emerald-200/90 p-3 rounded-2xl flex items-center justify-between gap-3 text-xs shadow-2xs">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div 
+                    onClick={() => setIsImagePreviewOpen(true)}
+                    className="w-12 h-12 rounded-xl overflow-hidden border border-emerald-300 shrink-0 cursor-pointer hover:opacity-90 relative group shadow-2xs"
+                    title="Click to view full weighing scale photo"
+                  >
+                    <img src={transaction.weightImage} alt="Weighing Scale Proof" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/25 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Eye className="w-4 h-4 text-white" />
+                    </div>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-emerald-950 text-xs sm:text-sm flex items-center gap-1.5">
+                      <Camera className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                      <span>Weighing Scale Proof Photo</span>
+                    </p>
+                    <p className="text-[10px] text-emerald-700/90 mt-0.5">
+                      Captured via mobile camera & stored in database
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsImagePreviewOpen(true)}
+                  className="px-3 py-1.5 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs shrink-0"
+                >
+                  View Photo
+                </button>
+              </div>
+            )}
+
             {/* Formulas & Calculations Summary Card - Compact 2-column layout */}
             {bagWeights.length > 0 && (
               <div className="bg-slate-50 border border-slate-200 p-3 sm:p-3.5 rounded-2xl space-y-2 text-xs w-full shadow-2xs shrink-0">
@@ -377,6 +412,39 @@ export const ViewWeightDetailsModal: React.FC<ViewWeightDetailsModalProps> = ({
 
         </div>
       </div>
+
+      {/* Scale Proof Photo Lightbox */}
+      {isImagePreviewOpen && transaction.weightImage && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+          <div className="relative max-w-lg w-full bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-slate-800 flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                <Camera className="h-4 w-4 text-emerald-400" />
+                <span>Weighing Scale Proof Photo • Lot #{transaction.lot}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsImagePreviewOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-all cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-2 flex-1 overflow-auto flex items-center justify-center bg-black/40">
+              <img src={transaction.weightImage} alt="Scale Proof" className="max-h-[70vh] w-auto object-contain rounded-xl" />
+            </div>
+            <div className="p-3 bg-slate-900 border-t border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsImagePreviewOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all"
+              >
+                Close Photo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

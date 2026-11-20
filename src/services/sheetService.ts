@@ -23,6 +23,7 @@ export interface Transaction {
   calculatedAmount?: number;
   storageType?: 'AC' | 'NON AC' | string;
   coldStorageName?: string;
+  weightImage?: string;
 }
 
 export interface TenantConfig {
@@ -672,7 +673,8 @@ export async function fetchTransactions(): Promise<Transaction[]> {
           netWeight: item.net_weight ? parseFloat(String(item.net_weight)) : undefined,
           calculatedAmount: item.calculated_amount ? parseFloat(String(item.calculated_amount)) : undefined,
           storageType: item.storage_type || item.storageType || 'NON AC',
-          coldStorageName: (item.storage_type === 'AC' || item.storageType === 'AC') ? (item.cold_storage_name || item.coldStorageName || '') : ''
+          coldStorageName: (item.storage_type === 'AC' || item.storageType === 'AC') ? (item.cold_storage_name || item.coldStorageName || '') : '',
+          weightImage: item.weight_image || item.weightImage || undefined
         };
       })
       // Absolute guarantee: filter strictly by current sub route slug in memory
@@ -809,7 +811,8 @@ export async function addTransaction(
       net_weight: newTx.netWeight !== undefined && newTx.netWeight !== null ? Number(newTx.netWeight) : null,
       calculated_amount: newTx.calculatedAmount !== undefined && newTx.calculatedAmount !== null ? Number(newTx.calculatedAmount) : null,
       storage_type: newTx.storageType || 'NON AC',
-      cold_storage_name: newTx.storageType === 'AC' ? (newTx.coldStorageName || '').trim() : ''
+      cold_storage_name: newTx.storageType === 'AC' ? (newTx.coldStorageName || '').trim() : '',
+      weight_image: newTx.weightImage || null
     };
 
     let { error } = await supabase
@@ -818,9 +821,10 @@ export async function addTransaction(
 
     if (error && error.message && (
       error.message.includes('storage_type') || 
-      error.message.includes('cold_storage_name')
+      error.message.includes('cold_storage_name') ||
+      error.message.includes('weight_image')
     )) {
-      const { storage_type, cold_storage_name, ...fallbackRow } = supabaseRow;
+      const { storage_type, cold_storage_name, weight_image, ...fallbackRow } = supabaseRow;
       const res = await supabase.from('transactions').upsert(fallbackRow, { onConflict: 'transaction_id' });
       error = res.error;
     }
@@ -870,7 +874,8 @@ export async function updateWeight(
   grossWeight?: number,
   bagsWeight?: number,
   netWeight?: number,
-  calculatedAmount?: number
+  calculatedAmount?: number,
+  weightImage?: string
 ): Promise<{ success: boolean; message: string }> {
   
   if (!isSupabaseEnabled()) {
@@ -890,6 +895,7 @@ export async function updateWeight(
       if (bagsWeight !== undefined && bagsWeight !== null) txs[index].bagsWeight = bagsWeight;
       if (netWeight !== undefined && netWeight !== null) txs[index].netWeight = netWeight;
       if (calculatedAmount !== undefined && calculatedAmount !== null) txs[index].calculatedAmount = calculatedAmount;
+      if (weightImage !== undefined && weightImage !== null) txs[index].weightImage = weightImage;
       
       saveMockTransactions(txs);
       return { success: true, message: 'Ledger details updated in local database (Mock Mode)' };
@@ -912,14 +918,29 @@ export async function updateWeight(
     if (bagsWeight !== undefined && bagsWeight !== null) updates.bags_weight = bagsWeight;
     if (netWeight !== undefined && netWeight !== null) updates.net_weight = netWeight;
     if (calculatedAmount !== undefined && calculatedAmount !== null) updates.calculated_amount = calculatedAmount;
+    if (weightImage !== undefined && weightImage !== null) updates.weight_image = weightImage;
 
-    const { error } = await supabase
-      .from('transactions')
-      .update(updates)
-      .eq('transaction_id', transactionId);
+    const runSupabaseUpdate = async (payload: any) => {
+      const { error } = await supabase
+        .from('transactions')
+        .update(payload)
+        .eq('transaction_id', transactionId);
+      if (error) throw error;
+    };
 
-    if (error) {
-      throw new Error(error.message);
+    try {
+      await runSupabaseUpdate(updates);
+    } catch (colErr: any) {
+      if (colErr?.message && (
+        colErr.message.includes('weight_image') || 
+        colErr.message.includes('storage_type') || 
+        colErr.message.includes('cold_storage_name')
+      )) {
+        const { weight_image, ...fallbackUpdates } = updates;
+        await runSupabaseUpdate(fallbackUpdates);
+      } else {
+        throw colErr;
+      }
     }
 
     // Sync state locally too
@@ -939,6 +960,7 @@ export async function updateWeight(
       if (bagsWeight !== undefined && bagsWeight !== null) txs[index].bagsWeight = bagsWeight;
       if (netWeight !== undefined && netWeight !== null) txs[index].netWeight = netWeight;
       if (calculatedAmount !== undefined && calculatedAmount !== null) txs[index].calculatedAmount = calculatedAmount;
+      if (weightImage !== undefined && weightImage !== null) txs[index].weightImage = weightImage;
       saveMockTransactions(txs);
     }
 
@@ -963,6 +985,8 @@ export async function updateWeight(
       if (bagsWeight !== undefined && bagsWeight !== null) txs[index].bagsWeight = bagsWeight;
       if (netWeight !== undefined && netWeight !== null) txs[index].netWeight = netWeight;
       if (calculatedAmount !== undefined && calculatedAmount !== null) txs[index].calculatedAmount = calculatedAmount;
+      if (weightImage !== undefined && weightImage !== null) txs[index].weightImage = weightImage;
+      saveMockTransactions(txs);
       saveMockTransactions(txs);
       return { success: true, message: 'Offline update: ledger details saved to local database' };
     }
@@ -1117,7 +1141,8 @@ export async function editTransaction(
         sub_url: existing?.subUrl || currentTenant.subUrl,
         timestamp: existing?.timestamp || updatedTx.timestamp || new Date().toISOString(),
         weight: existing?.weight || '',
-        total_value: Number(updatedTx.totalValue) || 0
+        total_value: Number(updatedTx.totalValue) || 0,
+        weight_image: updatedData.weightImage !== undefined ? updatedData.weightImage : (existing?.weightImage || null)
       };
 
       if (updatedData.rateReason !== undefined) {
@@ -1179,9 +1204,10 @@ export async function editTransaction(
       } catch (colErr: any) {
         if (colErr?.message && (
           colErr.message.includes('storage_type') || 
-          colErr.message.includes('cold_storage_name')
+          colErr.message.includes('cold_storage_name') ||
+          colErr.message.includes('weight_image')
         )) {
-          const { storage_type, cold_storage_name, ...cleanRow } = supabaseRow;
+          const { storage_type, cold_storage_name, weight_image, ...cleanRow } = supabaseRow;
           await runUpdate(cleanRow);
         } else {
           throw colErr;

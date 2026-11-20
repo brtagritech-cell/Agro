@@ -75,9 +75,10 @@ CREATE TABLE IF NOT EXISTS public.transactions (
   cold_storage_name TEXT DEFAULT ''
 );
 
--- Ensure storage_type and cold_storage_name columns exist if table was created previously
+-- Ensure storage_type, cold_storage_name, and weight_image columns exist if table was created previously
 ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS storage_type TEXT DEFAULT 'NON AC';
 ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS cold_storage_name TEXT DEFAULT '';
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS weight_image TEXT;
 
 -- 3. Enable Row Level Security (RLS)
 ALTER TABLE public.tenants ENABLE ROW LEVEL SECURITY;

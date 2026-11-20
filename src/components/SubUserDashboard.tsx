@@ -18,10 +18,12 @@ import {
   Eye,
   User,
   Users,
-  Snowflake
+  Snowflake,
+  Camera
 } from 'lucide-react';
 import { type Transaction, isGoogleSheetsEnabled, getCurrentTenant } from '../services/sheetService';
 import { ViewWeightDetailsModal } from './ViewWeightDetailsModal';
+import { CameraCaptureModal } from './CameraCaptureModal';
 
 const getFirstThreeDigits = (num: number): number => {
   const intPartStr = Math.floor(num).toString();
@@ -47,7 +49,8 @@ interface SubUserDashboardProps {
     grossWeight?: number,
     bagsWeight?: number,
     netWeight?: number,
-    calculatedAmount?: number
+    calculatedAmount?: number,
+    weightImage?: string
   ) => Promise<{ success: boolean; message: string }>;
   onRefresh: () => void;
   isLoading: boolean;
@@ -79,6 +82,12 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
   const [confirmedRate, setConfirmedRate] = useState('');
   const [confirmedMark, setConfirmedMark] = useState<string>((currentTenant?.marks || [])[0] || 'BRT');
   const [rateReason, setRateReason] = useState('');
+
+  // Mobile / Tablet Camera states
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [cameraBagIdx, setCameraBagIdx] = useState<number | undefined>(undefined);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   useEffect(() => {
     if (currentTenant?.marks && currentTenant.marks.length > 0) {
@@ -153,6 +162,8 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
       setConfirmedRate(tx.rate.toString());
       setConfirmedMark(normalizeMark(tx.mark));
       setRateReason('');
+      setCapturedImage(tx.weightImage || null);
+      setPreviewImage(null);
       setFeedback(null);
       setIsSaving(false);
       setStep('entry');
@@ -177,8 +188,51 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
       );
     }
     setSelectedTx(null);
+    setCapturedImage(null);
+    setPreviewImage(null);
+    setIsCameraOpen(false);
     setStep('entry');
     onRefresh(); // Refresh queue on release
+  };
+
+  const openCameraForBag = (idx?: number) => {
+    setCameraBagIdx(idx);
+    setIsCameraOpen(true);
+  };
+
+  const handleCameraCapture = (data: { weight: string; image: string; allWeights?: string[] }) => {
+    setCapturedImage(data.image);
+
+    // If multiple bag weights detected from a sheet/slip and general scan triggered
+    if (data.allWeights && data.allWeights.length > 1 && (cameraBagIdx === undefined || cameraBagIdx === 0)) {
+      setBagWeights(data.allWeights);
+      setFeedback({
+        success: true,
+        message: `Extracted ${data.allWeights.length} bag weights from image! Scale photo attached.`
+      });
+      return;
+    }
+
+    // Single weight application
+    const targetIdx = cameraBagIdx !== undefined 
+      ? cameraBagIdx 
+      : (bagWeights.findIndex(w => !w.trim()) !== -1 ? bagWeights.findIndex(w => !w.trim()) : bagWeights.length - 1);
+    
+    const validIdx = targetIdx >= 0 ? targetIdx : 0;
+
+    setBagWeights(prev => {
+      const next = [...prev];
+      while (next.length <= validIdx) {
+        next.push('');
+      }
+      next[validIdx] = data.weight;
+      return next;
+    });
+
+    setFeedback({
+      success: true,
+      message: `Extracted ${data.weight} kg for Bag #${validIdx + 1}! Scale photo attached.`
+    });
   };
 
   const handleAddBagRow = () => {
@@ -381,7 +435,8 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
       grossWeight,
       bagsWeight,
       netWeight,
-      grossAmount
+      grossAmount,
+      capturedImage || undefined
     );
 
     setIsSaving(false);
@@ -1164,9 +1219,21 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
 
                   {/* Bag Weights List Section Header */}
                   <div className="flex justify-between items-center shrink-0 pt-0.5">
-                    <span className="block text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                      <span>Bag Weights List (kg)</span>
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="block text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <span>Bag Weights List (kg)</span>
+                      </span>
+                      {/* Mobile & Tab View Only: Camera Quick Scan Button */}
+                      <button
+                        type="button"
+                        onClick={() => openCameraForBag(undefined)}
+                        className="lg:hidden inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 text-emerald-800 border border-emerald-200/90 rounded-lg text-[10px] font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
+                        title="Open mobile camera to scan scale weights"
+                      >
+                        <Camera className="h-3 w-3 text-emerald-600" />
+                        <span>Scan Scale</span>
+                      </button>
+                    </div>
                     <span className="text-[11px] font-bold font-mono bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-full border border-emerald-200">
                       {bagWeights.length} Bags ({bagWeights.filter(w => parseFloat(w) > 0).length} Entered)
                     </span>
@@ -1202,6 +1269,17 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
                               : 'border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 text-slate-800'
                           }`}
                         />
+
+                        {/* Mobile & Tab View Only: Camera Icon Button */}
+                        <button
+                          type="button"
+                          onClick={() => openCameraForBag(idx)}
+                          className="lg:hidden p-2 text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 border border-emerald-200/80 rounded-xl transition-all shrink-0 cursor-pointer shadow-2xs active:scale-95"
+                          title={`Open camera to snap scale for Bag #${idx + 1}`}
+                        >
+                          <Camera className="h-4 w-4" />
+                        </button>
+
                         <button
                           type="button"
                           onClick={() => handleRemoveBagRow(idx)}
@@ -1224,6 +1302,50 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
                     <Plus className="h-4 w-4" />
                     <span>Add Bag ({bagWeights.length + 1})</span>
                   </button>
+
+                  {/* Scale Photo Attached Badge & Preview Card */}
+                  {capturedImage && (
+                    <div className="bg-emerald-50/90 border border-emerald-200 p-2.5 rounded-xl flex items-center justify-between gap-2.5 text-xs text-emerald-950 animate-fade-in shadow-2xs">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div 
+                          onClick={() => setPreviewImage(capturedImage)}
+                          className="w-10 h-10 rounded-lg overflow-hidden border border-emerald-300 shrink-0 cursor-pointer hover:opacity-90 relative group shadow-2xs"
+                          title="Click to view full scale image"
+                        >
+                          <img src={capturedImage} alt="Scale Proof" className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Eye className="w-3.5 h-3.5 text-white" />
+                          </div>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-emerald-900 text-xs flex items-center gap-1.5">
+                            <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                            <span>Scale Photo Attached</span>
+                          </p>
+                          <p className="text-[10px] text-emerald-700/90 truncate">
+                            Saved in database on confirm
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewImage(capturedImage)}
+                          className="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-2xs"
+                        >
+                          View Photo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCapturedImage(null)}
+                          className="p-1 text-slate-400 hover:text-rose-600 rounded-lg transition-all cursor-pointer"
+                          title="Remove attached photo"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Compact Operational Calculations Card */}
                   {(() => {
@@ -1466,6 +1588,48 @@ export const SubUserDashboard: React.FC<SubUserDashboardProps> = ({
           onUpdate={onRefresh}
           allowPrint={false}
         />
+      )}
+
+      {/* Mobile / Tablet Scale Camera Scanner Modal */}
+      <CameraCaptureModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onCapture={handleCameraCapture}
+        targetBagIndex={cameraBagIdx}
+        lotNumber={selectedTx?.lot}
+      />
+
+      {/* Scale Proof Photo Lightbox Modal */}
+      {previewImage && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+          <div className="relative max-w-lg w-full bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-slate-800 flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                <Camera className="h-4 w-4 text-emerald-400" />
+                <span>Captured Weighing Scale Photo</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-all cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-2 flex-1 overflow-auto flex items-center justify-center bg-black/40">
+              <img src={previewImage} alt="Scale Display" className="max-h-[70vh] w-auto object-contain rounded-xl" />
+            </div>
+            <div className="p-3 bg-slate-900 border-t border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-all"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>
